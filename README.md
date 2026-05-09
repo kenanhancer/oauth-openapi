@@ -87,30 +87,22 @@ The deprecated `password` and `implicit` grants are intentionally excluded.
 
 ### View interactively
 
-Both viewers are zero-install via `npx`:
+Three viewers cover different use cases — pick the one that matches your goal:
 
-```bash
-# Redoc — read-only documentation, 3-panel layout, clean for reading
-npx @redocly/cli preview-docs oauth-openapi.yaml --port 8765
+| Tool | Command | Default port | Use it for |
+|---|---|---|---|
+| **Redoc** | `npx @redocly/cli preview-docs oauth-openapi.yaml --port 8765` | 8765 | Read-only 3-panel documentation; clean for reading |
+| **Scalar** | `npx @scalar/cli document serve oauth-openapi.yaml --port 8767` | 8767 | Modern API reference with `Cmd+K` search and `Try it out`; supports OpenAPI 3.1 |
+| **Swagger UI** | `./tools/serve-swagger-ui.sh oauth-openapi.yaml --port 8768` | 8765 | Classic interactive UI with `Try it out` + `Authorize` for OAuth flows |
 
-# Swagger UI — interactive explorer with "Try it out" + "Authorize"
-npx swagger-ui-watcher oauth-openapi.yaml --port 8767
-```
-
-Both watch the YAML for changes and auto-reload the browser. Pick the one
-that matches your goal:
-
-| Goal | Tool |
-|---|---|
-| Read the spec like documentation | Redoc |
-| Click "Try it out" and send real HTTP requests | Swagger UI |
-| Test OAuth flows via "Authorize" button | Swagger UI |
-| Visually compare layouts | Run both side-by-side on different ports |
-
-For deeper Swagger UI customization (custom plugins, request interceptors,
-themes), embed the official [`swagger-ui-dist`](https://www.npmjs.com/package/swagger-ui-dist)
-package in your own HTML — `swagger-ui-watcher` is a community CLI wrapper
-around the same library and exposes only its CLI flags.
+Why a script for Swagger UI? The community npm CLIs that claim to wrap Swagger
+UI (`swagger-ui-watcher`, `swagger-ui-cli`, `swagger-ui-live`) are either
+broken, abandoned, or bundle an older Swagger Editor that does not support
+OpenAPI 3.1. SmartBear publishes the [`swagger-ui-dist`](https://www.npmjs.com/package/swagger-ui-dist)
+library but never shipped a CLI for it. `tools/serve-swagger-ui.sh` is a
+generic, ~250-line bash script that fills that gap — see
+[`tools/README.md`](tools/README.md) for full options, exit codes, and design
+notes.
 
 ### Generate clients
 
