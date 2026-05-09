@@ -87,20 +87,30 @@ The deprecated `password` and `implicit` grants are intentionally excluded.
 
 ### View interactively
 
-```bash
-# Swagger UI (Docker)
-docker run -p 8080:8080 \
-  -e SWAGGER_JSON=/spec/oauth-openapi.yaml \
-  -v "$PWD:/spec" \
-  swaggerapi/swagger-ui
-
-# Then visit http://localhost:8080
-```
+Both viewers are zero-install via `npx`:
 
 ```bash
-# Redoc (zero-install via npx)
-npx @redocly/cli preview-docs oauth-openapi.yaml
+# Redoc — read-only documentation, 3-panel layout, clean for reading
+npx @redocly/cli preview-docs oauth-openapi.yaml --port 8765
+
+# Swagger UI — interactive explorer with "Try it out" + "Authorize"
+npx swagger-ui-watcher oauth-openapi.yaml --port 8767
 ```
+
+Both watch the YAML for changes and auto-reload the browser. Pick the one
+that matches your goal:
+
+| Goal | Tool |
+|---|---|
+| Read the spec like documentation | Redoc |
+| Click "Try it out" and send real HTTP requests | Swagger UI |
+| Test OAuth flows via "Authorize" button | Swagger UI |
+| Visually compare layouts | Run both side-by-side on different ports |
+
+For deeper Swagger UI customization (custom plugins, request interceptors,
+themes), embed the official [`swagger-ui-dist`](https://www.npmjs.com/package/swagger-ui-dist)
+package in your own HTML — `swagger-ui-watcher` is a community CLI wrapper
+around the same library and exposes only its CLI flags.
 
 ### Generate clients
 
