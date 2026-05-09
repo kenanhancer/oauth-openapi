@@ -89,11 +89,15 @@ The deprecated `password` and `implicit` grants are intentionally excluded.
 
 Three viewers cover different use cases — pick the one that matches your goal:
 
-| Tool | Command | Default port | Use it for |
+| Tool | Command | Port (in command) | Use it for |
 |---|---|---|---|
 | **Redoc** | `npx @redocly/cli preview-docs oauth-openapi.yaml --port 8765` | 8765 | Read-only 3-panel documentation; clean for reading |
-| **Scalar** | `npx @scalar/cli document serve oauth-openapi.yaml --port 8767` | 8767 | Modern API reference with `Cmd+K` search and `Try it out`; supports OpenAPI 3.1 |
-| **Swagger UI** | `./tools/serve-swagger-ui.sh oauth-openapi.yaml --port 8768` | 8765 | Classic interactive UI with `Try it out` + `Authorize` for OAuth flows |
+| **Scalar** | `npx @scalar/cli document serve oauth-openapi.yaml --port 8767` | 8767 | Modern API reference with `Cmd+K` search and `Test Request`; supports OpenAPI 3.1 |
+| **Swagger UI** | `./tools/serve-swagger-ui.sh oauth-openapi.yaml --port 8768` | 8768 | Classic interactive UI with `Try it out` + `Authorize` for OAuth flows |
+
+The script runs all three on different ports so you can compare side-by-side.
+You can also start them all at once with the `/preview` slash command (see
+[Claude Code integration](#claude-code-integration) below).
 
 Why a script for Swagger UI? The community npm CLIs that claim to wrap Swagger
 UI (`swagger-ui-watcher`, `swagger-ui-cli`, `swagger-ui-live`) are either
@@ -177,13 +181,40 @@ machine-readably, with the remaining 10% (browser flows) documented in prose.
 ```
 oauth-openapi/
 ├── README.md                              this file
-├── oauth-openapi.yaml                     the spec
+├── CLAUDE.md                              Claude Code project conventions
+├── oauth-openapi.yaml                     the spec (1413 lines)
+├── .spectral.yaml                         Spectral lint config (extends spectral:oas)
 ├── .gitignore
+├── .claude/                               Claude Code project config
+│   ├── settings.json                      tool permissions for the dev workflow
+│   └── commands/                          slash commands
+│       ├── preview.md                     start all 3 viewers
+│       ├── preview-stop.md                stop them
+│       └── lint.md                        run Spectral
+├── tools/
+│   ├── README.md                          runbook for the scripts in this folder
+│   └── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
 └── references/
     ├── NOTES.md                           description of the two reference specs
     ├── ibm-api-connect-oauth.yaml         IBM's archived spec (Swagger 2.0, 2021)
     └── ybelenko-oauth2-endpoints.yaml     ybelenko's community spec (OpenAPI 3.0.2, 2021)
 ```
+
+## Claude Code integration
+
+If you use [Claude Code](https://claude.com/claude-code), the project ships
+with a `CLAUDE.md` (project conventions) and `.claude/` (permissions + slash
+commands) so that common workflows are one-liners:
+
+| Slash command | Effect |
+|---|---|
+| `/preview` | Start Redoc (8765), Scalar (8767), and Swagger UI (8768) in parallel; opens browsers. |
+| `/preview-stop` | Kill any process listening on those three ports. |
+| `/lint` | Run Spectral against `oauth-openapi.yaml` and surface errors. |
+
+These are convenience wrappers around the same `npx` and script commands
+documented above — usable from any shell, but pre-flighted for Claude Code
+sessions to skip permission prompts.
 
 ## Roadmap
 
