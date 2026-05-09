@@ -1239,42 +1239,8 @@ components:
           description: 'RAR (RFC 9396): supported authorization detail types.'
 
     # -----------------------------------------------------------------
-    # OIDC ID token claims & UserInfo — OIDC Core §2 / §5
+    # UserInfo — OIDC Core §5
     # -----------------------------------------------------------------
-    IDTokenClaims:
-      description: Standard OIDC ID token claims (carried in a JWT). OIDC Core §2.
-      type: object
-      required: [iss, sub, aud, exp, iat]
-      properties:
-        iss:
-          type: string
-          format: uri
-        sub:
-          type: string
-          description: Subject identifier — locally unique within the issuer.
-        aud:
-          oneOf:
-            - type: string
-            - type: array
-              items:
-                type: string
-        exp:
-          type: integer
-        iat:
-          type: integer
-        auth_time:
-          type: integer
-        nonce:
-          type: string
-        acr:
-          type: string
-        amr:
-          type: array
-          items:
-            type: string
-        azp:
-          type: string
-
     UserInfoResponse:
       description: |
         OIDC standard claims (§5.1) returned by `/userinfo`. The `sub` claim
