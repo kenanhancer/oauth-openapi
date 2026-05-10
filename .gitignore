@@ -9,9 +9,3 @@ build/
 *.log
 .env
 .env.local
-
-# Cached RFC source documents fetched by validation agents (reproducible
-# via curl from the URL in each report — no need to commit).
-references/rfc-validation/.rfc*-source.txt
-references/rfc-validation/.oidc-*-source.html
-references/rfc-validation/.draft-*-source.txt
