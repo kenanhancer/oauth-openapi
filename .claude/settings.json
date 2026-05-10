@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx @redocly/cli*)",
+      "Bash(npx @scalar/cli*)",
+      "Bash(npx @stoplight/spectral-cli*)",
+      "Bash(npx @openapitools/openapi-generator-cli*)",
+      "Bash(npx swagger-ui-watcher*)",
+      "Bash(./tools/serve-swagger-ui.sh*)",
+      "Bash(tools/serve-swagger-ui.sh*)",
+      "Bash(python3 -m http.server*)",
+      "Bash(python3 -m json.tool*)",
+      "Bash(python3 -c*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(curl:*)",
+      "Bash(open:*)",
+      "Bash(npm view*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
