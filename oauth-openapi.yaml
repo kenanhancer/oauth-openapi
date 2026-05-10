@@ -131,12 +131,30 @@ paths:
         - $ref: '#/components/parameters/RequestUri'
         - $ref: '#/components/parameters/AuthorizationDetails'
         - $ref: '#/components/parameters/Resource'
+        # OIDC Core §3.1.2.1 (incl. mandatory-to-implement §15.1)
+        - $ref: '#/components/parameters/Display'
+        - $ref: '#/components/parameters/UILocales'
+        - $ref: '#/components/parameters/ClaimsLocales'
+        - $ref: '#/components/parameters/IDTokenHint'
+        - $ref: '#/components/parameters/Claims'
+        # OIDC Core §6 / RFC 9101 (JAR)
+        - $ref: '#/components/parameters/Request'
+        # RFC 9449 §10 (early DPoP binding at the authorization endpoint)
+        - $ref: '#/components/parameters/DPoPJKT'
       responses:
         '302':
           description: |
-            User-agent redirect back to `redirect_uri`. On success, the
-            `Location` header carries `code` and `state`. On failure it carries
-            `error`, `error_description`, and `state`.
+            User-agent redirect back to `redirect_uri`. The `Location`
+            header carries:
+            - on success: `code`, `state`, plus `iss` (RFC 9207) when the AS
+              advertises `authorization_response_iss_parameter_supported`.
+              For OIDC Hybrid (`response_type=code id_token`) it also carries
+              `id_token` in the URL fragment.
+            - on failure: `error`, `error_description`, `error_uri`, `state`,
+              plus `iss` per RFC 9207.
+
+            OAuth 2.1 §7.5.4 / RFC 9700 §4.11 RECOMMEND HTTP 303 over 302
+            and PROHIBIT 307; both are modeled as alternative status codes.
           headers:
             Location:
               required: true
@@ -144,10 +162,28 @@ paths:
                 type: string
                 format: uri
                 examples:
-                  - 'https://client.example.com/cb?code=SplxlOBeZQQYbYS6WxSbIA&state=xyz'
-                  - 'https://client.example.com/cb?error=access_denied&state=xyz'
+                  - 'https://client.example.com/cb?code=SplxlOBeZQQYbYS6WxSbIA&state=xyz&iss=https%3A%2F%2Fas.example.com'
+                  - 'https://client.example.com/cb?error=access_denied&state=xyz&iss=https%3A%2F%2Fas.example.com'
+        '303':
+          description: 'Same as 302; RECOMMENDED status code per OAuth 2.1 §7.5.4.'
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
         '200':
           description: HTML consent or authentication page (intermediate state)
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: |
+            Non-redirecting error. Per RFC 6749 §4.1.2.1, when `redirect_uri`
+            is missing, malformed, or does not match a registered URI, the
+            AS MUST NOT redirect to it; instead it returns an HTML error page.
+            Also returned for malformed `client_id`.
           content:
             text/html:
               schema:
@@ -190,13 +226,11 @@ paths:
           description: Access token issued
           headers:
             Cache-Control:
-              schema:
-                type: string
-                example: no-store
+              $ref: '#/components/headers/CacheControlNoStore'
             Pragma:
-              schema:
-                type: string
-                example: no-cache
+              $ref: '#/components/headers/PragmaNoCache'
+            DPoP-Nonce:
+              $ref: '#/components/headers/DPoPNonce'
           content:
             application/json:
               schema:
@@ -209,6 +243,7 @@ paths:
         - clientSecretBasic: []
         - clientSecretPost: []
         - clientAssertion: []
+        - mtls: []
         - none: []
 
   # =========================================================================
@@ -220,10 +255,12 @@ paths:
       operationId: revoke
       summary: Token revocation
       description: |
-        Revokes an access or refresh token before its natural expiry. The
-        server SHOULD also revoke any refresh tokens issued from the revoked
-        token's authorization grant. A successful revocation always returns
-        HTTP 200 — the body is empty.
+        Revokes an access or refresh token before its natural expiry. Per
+        RFC 7009 §2.1, when a refresh token is revoked the AS SHOULD also
+        invalidate all access tokens issued under the same authorization
+        grant. (Cascade is from refresh → access; not the other direction.)
+        A successful revocation always returns HTTP 200 with an empty body
+        — even when the token is unknown to the server.
       externalDocs:
         description: RFC 7009 §2
         url: https://datatracker.ietf.org/doc/html/rfc7009#section-2
@@ -235,7 +272,12 @@ paths:
               $ref: '#/components/schemas/RevocationRequest'
       responses:
         '200':
-          description: Revocation accepted (returned even if the token was unknown)
+          description: Revocation accepted (returned even if the token was unknown).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlNoStore'
+            Pragma:
+              $ref: '#/components/headers/PragmaNoCache'
         '400':
           $ref: '#/components/responses/OAuthError'
         '401':
@@ -244,6 +286,8 @@ paths:
         - clientSecretBasic: []
         - clientSecretPost: []
         - clientAssertion: []
+        - mtls: []
+        - none: []
 
   # =========================================================================
   # /introspect — RFC 7662
@@ -269,17 +313,31 @@ paths:
               $ref: '#/components/schemas/IntrospectionRequest'
       responses:
         '200':
-          description: Introspection result (always 200, even for inactive tokens)
+          description: Introspection result (always 200, even for inactive tokens).
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlNoStore'
+            Pragma:
+              $ref: '#/components/headers/PragmaNoCache'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/IntrospectionResponse'
+            application/jwt:
+              schema:
+                $ref: '#/components/schemas/JWT'
+                description: |
+                  Signed/encrypted JWT containing the same claims, per the
+                  JWT Response for OAuth Token Introspection draft (used
+                  by FAPI 2.0).
         '401':
           $ref: '#/components/responses/OAuthError'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
         - clientAssertion: []
+        - mtls: []
+        - bearerAuth: []
 
   # =========================================================================
   # /device_authorization — RFC 8628
@@ -292,9 +350,19 @@ paths:
       description: |
         Initiates the Device Authorization Grant. The client receives a
         `device_code` and `user_code`; the user is instructed to visit
-        `verification_uri` on a second device and enter the `user_code`. The
-        client then polls `/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code`
-        until the user authorizes (or until `expires_in` elapses).
+        `verification_uri` on a second device and enter the `user_code`.
+        The client then polls `/token` with
+        `grant_type=urn:ietf:params:oauth:grant-type:device_code` until the
+        user authorizes or `expires_in` elapses.
+
+        Polling protocol (RFC 8628 §3.5): the AS may return `slow_down` to
+        increase the polling interval by 5 seconds, or `authorization_pending`
+        while the user is still consenting. Clients MUST stop polling on any
+        non-pending error (`access_denied`, `expired_token`).
+
+        The `device_code` MUST NOT be displayed to the end user.
+        The `user_code` is per §6.1 displayed to the user; servers SHOULD
+        accept dashed and case-insensitive variants.
       externalDocs:
         description: RFC 8628 §3.1
         url: https://datatracker.ietf.org/doc/html/rfc8628#section-3.1
@@ -306,7 +374,12 @@ paths:
               $ref: '#/components/schemas/DeviceAuthorizationRequest'
       responses:
         '200':
-          description: Device authorization issued
+          description: Device authorization issued.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlNoStore'
+            Pragma:
+              $ref: '#/components/headers/PragmaNoCache'
           content:
             application/json:
               schema:
@@ -318,6 +391,8 @@ paths:
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
+        - clientAssertion: []
+        - mtls: []
         - none: []
 
   # =========================================================================
@@ -334,6 +409,11 @@ paths:
         that the client then passes (instead of the full request) to
         `/authorize`. This avoids leaking parameters via browser history,
         keeps URLs short, and enables integrity protection.
+
+        Per §2.1, the request body MUST NOT contain a `request_uri` parameter.
+        Per §4, when `/authorize` is reached via a PAR-issued `request_uri`,
+        only `client_id` and `request_uri` are sent — all other parameters
+        come from the pushed body.
       externalDocs:
         description: RFC 9126 §2
         url: https://datatracker.ietf.org/doc/html/rfc9126#section-2
@@ -347,7 +427,14 @@ paths:
               $ref: '#/components/schemas/PARRequest'
       responses:
         '201':
-          description: Pushed authorization request accepted
+          description: Pushed authorization request accepted.
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/CacheControlNoStore'
+            Pragma:
+              $ref: '#/components/headers/PragmaNoCache'
+            DPoP-Nonce:
+              $ref: '#/components/headers/DPoPNonce'
           content:
             application/json:
               schema:
@@ -356,10 +443,18 @@ paths:
           $ref: '#/components/responses/OAuthError'
         '401':
           $ref: '#/components/responses/OAuthError'
+        '405':
+          description: 'Method Not Allowed (RFC 9126 §2.3) — only POST is permitted.'
+        '413':
+          description: 'Payload Too Large (RFC 9126 §2.3) — request exceeds AS-defined limit.'
+        '429':
+          description: 'Too Many Requests (RFC 9126 §2.3) — rate limit exceeded.'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
         - clientAssertion: []
+        - mtls: []
+        - none: []
 
   # =========================================================================
   # /userinfo — OIDC Core §5.3
@@ -371,10 +466,14 @@ paths:
       summary: UserInfo endpoint (GET, OIDC)
       description: |
         Returns claims about the authenticated end-user. Requires a valid
-        OIDC access token in the `Authorization` header (or DPoP).
+        OIDC access token in the `Authorization` header (Bearer or DPoP).
+        When the response is `application/jwt` (signed/encrypted), the JWT
+        also carries `iss` and `aud` claims (OIDC Core §5.3.2).
       externalDocs:
         description: OIDC Core §5.3
         url: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+      parameters:
+        - $ref: '#/components/parameters/DPoPHeader'
       responses:
         '200':
           description: UserInfo claims
@@ -384,10 +483,11 @@ paths:
                 $ref: '#/components/schemas/UserInfoResponse'
             application/jwt:
               schema:
-                type: string
-                description: Signed/encrypted JWT containing the claims
+                $ref: '#/components/schemas/UserInfoSignedResponse'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/BearerError'
+        '403':
+          $ref: '#/components/responses/BearerError'
       security:
         - bearerAuth: []
         - dpop: []
@@ -395,10 +495,15 @@ paths:
       tags: [OpenID Connect]
       operationId: userinfoPost
       summary: UserInfo endpoint (POST, OIDC)
-      description: Same semantics as GET; some clients prefer POST per OIDC Core §5.3.1.
+      description: |
+        Same semantics as GET; some clients prefer POST per OIDC Core §5.3.1.
+        Either `application/x-www-form-urlencoded` (with `access_token` form
+        field) or an Authorization header.
       externalDocs:
         description: OIDC Core §5.3.1
         url: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoRequest
+      parameters:
+        - $ref: '#/components/parameters/DPoPHeader'
       responses:
         '200':
           description: UserInfo claims
@@ -406,8 +511,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserInfoResponse'
+            application/jwt:
+              schema:
+                $ref: '#/components/schemas/UserInfoSignedResponse'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/BearerError'
+        '403':
+          $ref: '#/components/responses/BearerError'
       security:
         - bearerAuth: []
         - dpop: []
@@ -500,16 +610,18 @@ components:
       in: query
       required: true
       description: |
-        OAuth 2.1 permits only `code`. OIDC adds `id_token`, `code id_token`,
-        `code token`, `code id_token token` for hybrid flows.
+        OAuth 2.1 §10.1 permits only `code` (the Authorization Code grant).
+        OIDC Core §3.1.2.1 also defines `id_token` and `code id_token` for
+        OIDC Hybrid Flow. The hybrid front-channel-token variants
+        `code token` and `code id_token token` are intentionally excluded
+        per OAuth 2.1 / RFC 9700 §2.1.2 because front-channel access tokens
+        are insecure (browser history leakage).
       schema:
         type: string
         enum:
           - code
           - id_token
           - 'code id_token'
-          - 'code token'
-          - 'code id_token token'
 
     ClientId:
       name: client_id
@@ -561,21 +673,27 @@ components:
       in: query
       required: true
       description: |
-        PKCE challenge — `BASE64URL(SHA256(code_verifier))` when method is
-        `S256`. **Mandatory in OAuth 2.1 for all clients.** RFC 7636 §4.3.
+        PKCE challenge — `BASE64URL(SHA256(code_verifier))` for the `S256`
+        method. 43-128 characters from the unreserved set
+        `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
+        **Mandatory in OAuth 2.1 for all clients.** RFC 7636 §4.2.
       schema:
         type: string
+        minLength: 43
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._~-]+$'
 
     CodeChallengeMethod:
       name: code_challenge_method
       in: query
       required: true
       description: |
-        Always `S256` per OAuth 2.1. The plain method exists for legacy
-        compatibility only and SHOULD NOT be used.
+        Always `S256` per OAuth 2.1 §4.8 and RFC 9700 §4.8. The legacy
+        `plain` method (RFC 7636 §4.4) is intentionally omitted; clients
+        and servers compliant with OAuth 2.1 MUST use S256 only.
       schema:
         type: string
-        enum: [S256, plain]
+        enum: [S256]
         default: S256
 
     Nonce:
@@ -664,23 +782,145 @@ components:
       in: query
       required: false
       description: |
-        Indicator of the protected resource for which authorization is being
-        requested. RFC 8707.
+        Indicator of the protected resource(s) for which authorization is
+        requested. MUST be an absolute URI without a fragment component.
+        MAY appear multiple times to request audience for multiple
+        resources. RFC 8707 §2.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          format: uri
+
+    Display:
+      name: display
+      in: query
+      required: false
+      description: |
+        OIDC: how the AS should display the authentication and consent UI.
+        OIDC Core §3.1.2.1. Mandatory-to-implement (§15.1).
       schema:
         type: string
-        format: uri
+        enum: [page, popup, touch, wap]
+
+    UILocales:
+      name: ui_locales
+      in: query
+      required: false
+      description: |
+        OIDC: end-user UI language(s), space-separated BCP47 tags
+        (e.g. `fr-CA fr en`). Mandatory-to-implement (§15.1).
+      schema:
+        type: string
+        examples: ['en', 'fr-CA fr en']
+
+    ClaimsLocales:
+      name: claims_locales
+      in: query
+      required: false
+      description: |
+        OIDC: preferred languages for Claims being returned, space-separated
+        BCP47 tags. OIDC Core §5.2. Mandatory-to-implement (§15.1).
+      schema:
+        type: string
+
+    IDTokenHint:
+      name: id_token_hint
+      in: query
+      required: false
+      description: |
+        OIDC: previously issued ID Token passed as a hint about the user's
+        current or past authenticated session. OIDC Core §3.1.2.1.
+      schema:
+        type: string
+
+    Claims:
+      name: claims
+      in: query
+      required: false
+      description: |
+        OIDC: JSON-encoded object describing specific Claims being requested
+        for delivery in the ID Token and/or UserInfo response. OIDC Core §5.5.
+      schema:
+        type: string
+        description: JSON-encoded object
+
+    Request:
+      name: request
+      in: query
+      required: false
+      description: |
+        OIDC / RFC 9101 (JAR): a self-contained JWT containing the full
+        authorization request as claims. Mutually exclusive with
+        `request_uri`. OIDC Core §6.
+      schema:
+        type: string
+        description: A signed (and optionally encrypted) JWT
+
+    DPoPJKT:
+      name: dpop_jkt
+      in: query
+      required: false
+      description: |
+        DPoP key thumbprint to bind the resulting authorization code to a
+        specific DPoP key, even before the token request. RFC 9449 §10.1.
+      schema:
+        type: string
 
     DPoPHeader:
       name: DPoP
       in: header
       required: false
       description: |
-        DPoP proof JWT (RFC 9449). Present when the client uses
-        sender-constrained access tokens. The JWT proves possession of the
-        private key bound to the access token.
+        DPoP proof JWT (RFC 9449 §4). Required on `/token`, `/par`,
+        protected resources, and `/userinfo` whenever DPoP-bound access
+        tokens are in use. Header value is a single compact-serialized JWT
+        with `typ=dpop+jwt`, `alg`, `jwk` in the header and `jti`, `htm`,
+        `htu`, `iat` claims (plus `ath` at resource servers and `nonce`
+        when the AS issues a DPoP-Nonce challenge).
       schema:
         type: string
-        description: A JWT in compact serialization
+
+  # ---------------------------------------------------------------------------
+  # Reusable headers
+  # ---------------------------------------------------------------------------
+  headers:
+    CacheControlNoStore:
+      description: Required on token-bearing JSON responses (RFC 6749 §5.1).
+      schema:
+        type: string
+        const: 'no-store'
+    PragmaNoCache:
+      description: HTTP/1.0 cache directive paired with Cache-Control (RFC 6749 §5.1).
+      schema:
+        type: string
+        const: 'no-cache'
+    WWWAuthenticateBearer:
+      description: |
+        Bearer challenge from a protected resource (RFC 6750 §3). Format:
+        `Bearer realm="<realm>", scope="<space-list>", error="<code>",
+        error_description="<text>", error_uri="<uri>"`. All five parameters
+        are OPTIONAL but at least `error` is included on 401/403 responses.
+      schema:
+        type: string
+        examples: ['Bearer realm="api.example.com", error="invalid_token", error_description="The token expired"']
+    WWWAuthenticateDPoP:
+      description: |
+        DPoP challenge from a protected resource (RFC 9449 §7.1). Format
+        mirrors Bearer plus an `algs` parameter listing accepted DPoP
+        signing algorithms.
+      schema:
+        type: string
+        examples: ['DPoP error="use_dpop_nonce", algs="ES256 EdDSA"']
+    DPoPNonce:
+      description: |
+        Server-issued nonce that MUST be echoed in the next DPoP proof's
+        `nonce` claim (RFC 9449 §8). Servers MAY rotate the nonce on every
+        response.
+      schema:
+        type: string
 
   # ---------------------------------------------------------------------------
   # Reusable responses
@@ -688,6 +928,33 @@ components:
   responses:
     OAuthError:
       description: Standard OAuth 2.0 error response (RFC 6749 §5.2)
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/CacheControlNoStore'
+        Pragma:
+          $ref: '#/components/headers/PragmaNoCache'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BearerError:
+      description: |
+        Resource-server error per RFC 6750 §3 — includes a Bearer challenge
+        in the WWW-Authenticate header.
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWWAuthenticateBearer'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    DPoPError:
+      description: Resource-server error with a DPoP challenge (RFC 9449 §7.1).
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWWAuthenticateDPoP'
+        DPoP-Nonce:
+          $ref: '#/components/headers/DPoPNonce'
       content:
         application/json:
           schema:
@@ -722,171 +989,292 @@ components:
           'urn:ietf:params:oauth:grant-type:jwt-bearer': '#/components/schemas/JWTBearerTokenRequest'
           'urn:ietf:params:oauth:grant-type:token-exchange': '#/components/schemas/TokenExchangeRequest'
 
-    AuthorizationCodeTokenRequest:
-      description: RFC 6749 §4.1.3 with PKCE per RFC 7636 §4.5
+    # Reusable mixin: client authentication form fields (RFC 6749 §2.3, RFC 7523 §2.2).
+    # Most token-endpoint-style requests can include these alongside their grant-specific fields.
+    ClientAuthFields:
       type: object
-      required: [grant_type, code, redirect_uri, code_verifier]
       properties:
-        grant_type:
-          type: string
-          const: authorization_code
-        code:
-          type: string
-          description: The authorization code received from `/authorize`.
-        redirect_uri:
-          type: string
-          format: uri
-          description: Must match the `redirect_uri` used at `/authorize`.
-        code_verifier:
-          type: string
-          minLength: 43
-          maxLength: 128
-          description: PKCE verifier (RFC 7636 §4.1).
         client_id:
-          type: string
-          description: REQUIRED if the client is not authenticating with the server (e.g. public client).
-
-    ClientCredentialsTokenRequest:
-      description: RFC 6749 §4.4
-      type: object
-      required: [grant_type]
-      properties:
-        grant_type:
-          type: string
-          const: client_credentials
-        scope:
-          type: string
-          description: Space-delimited list of requested scopes.
-        resource:
-          type: string
-          format: uri
-          description: Resource indicator (RFC 8707).
-        audience:
-          type: string
-
-    RefreshTokenRequest:
-      description: RFC 6749 §6
-      type: object
-      required: [grant_type, refresh_token]
-      properties:
-        grant_type:
-          type: string
-          const: refresh_token
-        refresh_token:
-          type: string
-        scope:
           type: string
           description: |
-            Optional. If present, MUST be no broader than the original
-            authorization grant.
+            REQUIRED for public clients (no client secret) and clients that
+            authenticate via `client_assertion`. RFC 6749 §3.2.1.
+        client_secret:
+          type: string
+          description: |
+            Used with `client_id` for `client_secret_post` authentication.
+            HTTP Basic (`client_secret_basic`) is preferred; this form-body
+            variant is NOT RECOMMENDED per RFC 6749 §2.3.1.
+        client_assertion:
+          type: string
+          description: |
+            JWT bearing claims that authenticate the client. Used with
+            `client_assertion_type` for `client_secret_jwt` or
+            `private_key_jwt` authentication. RFC 7523 §2.2.
+        client_assertion_type:
+          type: string
+          const: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+          description: RFC 7523 §2.2.
+
+    # Reusable mixin: RFC 8707 resource indicators. May repeat — model as array.
+    ResourceIndicators:
+      type: object
+      properties:
+        resource:
+          type: array
+          description: |
+            Indicator(s) of the protected resource(s) for which the access
+            token is requested. Each value MUST be an absolute URI without a
+            fragment component. The parameter MAY be included multiple times
+            in the underlying form-encoded body. RFC 8707.
+          items:
+            type: string
+            format: uri
+
+    AuthorizationCodeTokenRequest:
+      description: |
+        RFC 6749 §4.1.3 with PKCE per RFC 7636 §4.5. Under OAuth 2.1 §10.2 the
+        `redirect_uri` parameter is no longer sent at the token endpoint and
+        is omitted from `required`.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type, code, code_verifier]
+          properties:
+            grant_type:
+              type: string
+              const: authorization_code
+            code:
+              type: string
+              description: The authorization code received from `/authorize`.
+            redirect_uri:
+              type: string
+              format: uri
+              description: |
+                OPTIONAL under OAuth 2.1 §10.2 (was REQUIRED in OAuth 2.0
+                §4.1.3). When present, MUST match the `redirect_uri` used at
+                `/authorize`. Some legacy AS implementations still require it.
+            code_verifier:
+              type: string
+              minLength: 43
+              maxLength: 128
+              pattern: '^[A-Za-z0-9._~-]+$'
+              description: |
+                PKCE verifier (RFC 7636 §4.1). 43-128 chars from the
+                unreserved set `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
+
+    ClientCredentialsTokenRequest:
+      description: RFC 6749 §4.4. Service-to-service grant, no end user.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type]
+          properties:
+            grant_type:
+              type: string
+              const: client_credentials
+            scope:
+              type: string
+              description: Space-delimited list of requested scopes.
+            audience:
+              type: string
+              description: |
+                NON-STANDARD — vendor extension (e.g. Auth0 uses `audience`
+                instead of RFC 8707 `resource`). Prefer `resource`. Kept here
+                for compatibility with vendor servers.
+
+    RefreshTokenRequest:
+      description: |
+        RFC 6749 §6. Per OAuth 2.1 §4.3.1 and RFC 9700 §2.2.2 the refresh
+        token SHOULD be sender-constrained (DPoP) or rotated on every use.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type, refresh_token]
+          properties:
+            grant_type:
+              type: string
+              const: refresh_token
+            refresh_token:
+              type: string
+            scope:
+              type: string
+              description: |
+                Optional. If present, MUST be no broader than the originally
+                granted scope. RFC 8707: the `resource` parameter on a
+                refresh request MUST be a subset of those originally granted.
 
     DeviceCodeTokenRequest:
-      description: RFC 8628 §3.4
-      type: object
-      required: [grant_type, device_code, client_id]
-      properties:
-        grant_type:
-          type: string
-          const: 'urn:ietf:params:oauth:grant-type:device_code'
-        device_code:
-          type: string
-          description: The `device_code` from `/device_authorization`.
-        client_id:
-          type: string
+      description: RFC 8628 §3.4. Polled by the client until the user authorizes.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type, device_code]
+          properties:
+            grant_type:
+              type: string
+              const: 'urn:ietf:params:oauth:grant-type:device_code'
+            device_code:
+              type: string
+              description: |
+                The opaque `device_code` from `/device_authorization`.
+                MUST NOT be displayed to the end user.
 
     JWTBearerTokenRequest:
-      description: RFC 7523 §2.1
-      type: object
-      required: [grant_type, assertion]
-      properties:
-        grant_type:
-          type: string
-          const: 'urn:ietf:params:oauth:grant-type:jwt-bearer'
-        assertion:
-          type: string
-          description: A signed JWT bearer assertion.
-        scope:
-          type: string
+      description: |
+        RFC 7523 §2.1. Note that the JWT itself authenticates the client in
+        most uses, so `client_assertion_*` is usually omitted.
+      allOf:
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type, assertion]
+          properties:
+            grant_type:
+              type: string
+              const: 'urn:ietf:params:oauth:grant-type:jwt-bearer'
+            assertion:
+              type: string
+              description: |
+                Signed JWT bearer assertion. REQUIRED claims (RFC 7523 §3):
+                `iss`, `sub`, `aud` (the AS token endpoint URL), `exp`.
+                RECOMMENDED: `nbf`, `iat`, `jti`. The JWT MUST be digitally
+                signed or MAC'd by the issuer and MUST be rejected by the AS
+                if any required claim is missing or invalid.
+            scope:
+              type: string
 
     TokenExchangeRequest:
-      description: RFC 8693 §2.1
-      type: object
-      required: [grant_type, subject_token, subject_token_type]
-      properties:
-        grant_type:
-          type: string
-          const: 'urn:ietf:params:oauth:grant-type:token-exchange'
-        subject_token:
-          type: string
-        subject_token_type:
-          type: string
-          enum:
-            - 'urn:ietf:params:oauth:token-type:access_token'
-            - 'urn:ietf:params:oauth:token-type:refresh_token'
-            - 'urn:ietf:params:oauth:token-type:id_token'
-            - 'urn:ietf:params:oauth:token-type:saml1'
-            - 'urn:ietf:params:oauth:token-type:saml2'
-            - 'urn:ietf:params:oauth:token-type:jwt'
-        actor_token:
-          type: string
-        actor_token_type:
-          type: string
-        requested_token_type:
-          type: string
-        audience:
-          type: string
-        resource:
-          type: string
-          format: uri
-        scope:
-          type: string
+      description: RFC 8693 §2.1.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [grant_type, subject_token, subject_token_type]
+          properties:
+            grant_type:
+              type: string
+              const: 'urn:ietf:params:oauth:grant-type:token-exchange'
+            subject_token:
+              type: string
+              description: Token representing the identity of the party on whose behalf the request is made.
+            subject_token_type:
+              $ref: '#/components/schemas/TokenTypeURI'
+            actor_token:
+              type: string
+              description: Token representing the identity of the acting party (delegation/impersonation).
+            actor_token_type:
+              $ref: '#/components/schemas/TokenTypeURI'
+              description: REQUIRED when `actor_token` is present.
+            requested_token_type:
+              $ref: '#/components/schemas/TokenTypeURI'
+              description: Type of token the client is requesting be issued.
+            audience:
+              type: array
+              description: |
+                RFC 8693-defined parameter (distinct from RFC 8707 `resource`).
+                Logical name(s) of the target service(s). MAY appear multiple
+                times in the form body — modeled here as array.
+              items:
+                type: string
+            scope:
+              type: string
+
+    # Token type URIs for RFC 8693 token exchange (§3).
+    TokenTypeURI:
+      type: string
+      enum:
+        - 'urn:ietf:params:oauth:token-type:access_token'
+        - 'urn:ietf:params:oauth:token-type:refresh_token'
+        - 'urn:ietf:params:oauth:token-type:id_token'
+        - 'urn:ietf:params:oauth:token-type:saml1'
+        - 'urn:ietf:params:oauth:token-type:saml2'
+        - 'urn:ietf:params:oauth:token-type:jwt'
 
     # -----------------------------------------------------------------
     # Token response — RFC 6749 §5.1 + OIDC additions
     # -----------------------------------------------------------------
     TokenResponse:
-      description: Successful token response — RFC 6749 §5.1, OIDC adds `id_token`.
+      description: |
+        Successful token response — RFC 6749 §5.1, with extensions:
+        OIDC Core §3.1.3.3 adds `id_token`; RFC 8693 §2.2.1 adds
+        `issued_token_type` (REQUIRED for token-exchange responses); RFC
+        9396 §6 adds `authorization_details`. Returned with
+        `Cache-Control: no-store` and `Pragma: no-cache` headers.
       type: object
       required: [access_token, token_type]
+      additionalProperties: true
       properties:
         access_token:
           type: string
-          description: The access token issued.
-          examples: [SlAV32hkKG]
+          description: |
+            The access token issued. Format is implementation-defined: an
+            opaque string (validated via introspection) or a JWT (RFC 9068
+            — see `JWTAccessTokenClaims` for the decoded shape).
+          examples:
+            - 'SlAV32hkKG'
+            - 'eyJhbGciOiJSUzI1NiIsInR5cCI6ImF0K2p3dCJ9.eyJpc3MiOiJodHRwczovL2FzLmV4YW1wbGUuY29tIiwiZXhwIjoxNzM1NjkzMjAwLCJhdWQiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbSIsInN1YiI6InVzZXItMTIzIiwiY2xpZW50X2lkIjoiYWJjMTIzIn0.signature'
         token_type:
           type: string
-          description: 'Typically `Bearer` (RFC 6750) or `DPoP` (RFC 9449).'
-          examples: [Bearer, DPoP]
+          description: |
+            Token presentation scheme. `Bearer` (RFC 6750) for unbound
+            tokens, `DPoP` (RFC 9449) for sender-constrained tokens, or
+            `N_A` for token-exchange responses where no usable access token
+            is returned (RFC 8693 §2.2.1).
+          examples: [Bearer, DPoP, N_A]
         expires_in:
           type: integer
-          description: Lifetime in seconds.
+          minimum: 1
+          description: Lifetime of the access token in seconds.
           examples: [3600]
         refresh_token:
           type: string
-          description: Optional refresh token (RFC 6749 §5.1).
+          description: |
+            Optional refresh token (RFC 6749 §5.1). Per OAuth 2.1 §4.3.1
+            and RFC 9700 §2.2.2, refresh tokens issued to public clients
+            SHOULD be sender-constrained (DPoP) or rotated on every use.
         scope:
           type: string
-          description: Granted scope, if different from requested.
+          description: Granted scope, if different from what was requested.
         id_token:
           type: string
-          description: 'OIDC: signed JWT identifying the authenticated user.'
+          description: |
+            OIDC: signed JWT identifying the authenticated user. The decoded
+            payload conforms to `IDTokenClaims`. Issued only when the
+            request scope contained `openid`.
+        issued_token_type:
+          $ref: '#/components/schemas/TokenTypeURI'
+          description: |
+            REQUIRED in RFC 8693 §2.2.1 token-exchange responses; absent
+            from other token responses.
         authorization_details:
           type: array
-          description: 'RAR (RFC 9396): granted authorization detail objects.'
+          description: |
+            RAR (RFC 9396 §6): granted authorization detail objects. MAY be
+            a subset of those requested.
           items:
-            type: object
+            $ref: '#/components/schemas/AuthorizationDetail'
 
     # -----------------------------------------------------------------
     # Error response — RFC 6749 §5.2
     # -----------------------------------------------------------------
     ErrorResponse:
+      description: |
+        Standard OAuth error response shape (RFC 6749 §5.2). Spec extensions
+        contribute additional error codes — the `error` enum below is the
+        union of all registered values from this spec's covered RFCs.
       type: object
       required: [error]
+      additionalProperties: true
       properties:
         error:
           type: string
-          description: Single ASCII error code.
+          description: Single ASCII error code from the IANA OAuth Extensions Error Registry.
           enum:
+            # RFC 6749 §5.2
             - invalid_request
             - invalid_client
             - invalid_grant
@@ -897,24 +1285,49 @@ components:
             - unsupported_response_type
             - server_error
             - temporarily_unavailable
-            - invalid_token            # RFC 6750
-            - insufficient_scope       # RFC 6750
-            - authorization_pending    # RFC 8628
-            - slow_down                # RFC 8628
-            - expired_token            # RFC 8628
-            - invalid_dpop_proof       # RFC 9449
-            - use_dpop_nonce           # RFC 9449
-            - invalid_target           # RFC 8707
+            # RFC 6750 (Bearer)
+            - invalid_token
+            - insufficient_scope
+            # RFC 7009 (Revocation §2.2.1)
+            - unsupported_token_type
+            # RFC 8628 (Device Grant §3.5)
+            - authorization_pending
+            - slow_down
+            - expired_token
+            # RFC 8707 (Resource Indicators §2)
+            - invalid_target
+            # RFC 9126 (PAR §2.3) and RFC 9101 (JAR)
+            - invalid_request_uri
+            - invalid_request_object
+            - request_not_supported
+            - request_uri_not_supported
+            # RFC 9396 (RAR §5)
+            - invalid_authorization_details
+            # RFC 9449 (DPoP §10)
+            - invalid_dpop_proof
+            - use_dpop_nonce
+            # OIDC Core §3.1.2.6 — authorization-endpoint-only
+            - interaction_required
+            - login_required
+            - account_selection_required
+            - consent_required
+            - registration_not_supported
         error_description:
           type: string
-          description: Human-readable description for the developer.
+          description: |
+            Human-readable text providing additional information for the
+            developer. ASCII printable characters only per RFC 6749 §5.2;
+            no `"`, `\`, or non-ASCII Unicode.
+          pattern: '^[\x20-\x21\x23-\x5B\x5D-\x7E]*$'
         error_uri:
           type: string
           format: uri
-          description: URI to a page describing the error.
+          description: URI of a human-readable web page describing the error.
         state:
           type: string
-          description: Echoed `state` from the request (when applicable).
+          description: |
+            Echoed `state` from the original authorization request, when
+            applicable (e.g. authorization-endpoint redirect errors).
 
     # -----------------------------------------------------------------
     # Device flow — RFC 8628
@@ -962,34 +1375,74 @@ components:
     # -----------------------------------------------------------------
     PARRequest:
       description: |
-        Same parameters as `/authorize` (response_type, client_id,
-        redirect_uri, scope, code_challenge, etc.) but POSTed as a body.
-      type: object
-      required: [client_id, response_type]
-      properties:
-        response_type:
-          type: string
-        client_id:
-          type: string
-        redirect_uri:
-          type: string
-          format: uri
-        scope:
-          type: string
-        state:
-          type: string
-        code_challenge:
-          type: string
-        code_challenge_method:
-          type: string
-        nonce:
-          type: string
-        request:
-          type: string
-          description: Optional signed JWT request object (JAR, RFC 9101).
-      additionalProperties: true
+        All parameters of an `/authorize` request, POSTed as a form body to
+        `/par` per RFC 9126 §2.1. Per §2.1 the body MUST NOT contain
+        `request_uri` (the request_uri is what `/par` returns, not what it
+        accepts). PKCE `code_challenge` is REQUIRED to maintain parity with
+        `/authorize` under OAuth 2.1.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - $ref: '#/components/schemas/ResourceIndicators'
+        - type: object
+          required: [client_id, response_type, code_challenge, code_challenge_method]
+          properties:
+            response_type:
+              type: string
+            client_id:
+              type: string
+            redirect_uri:
+              type: string
+              format: uri
+            scope:
+              type: string
+            state:
+              type: string
+            code_challenge:
+              type: string
+              minLength: 43
+              maxLength: 128
+              pattern: '^[A-Za-z0-9._~-]+$'
+            code_challenge_method:
+              type: string
+              enum: [S256]
+              default: S256
+            nonce:
+              type: string
+            prompt:
+              type: string
+            login_hint:
+              type: string
+            max_age:
+              type: integer
+              minimum: 0
+            ui_locales:
+              type: string
+            id_token_hint:
+              type: string
+            acr_values:
+              type: string
+            response_mode:
+              type: string
+            display:
+              type: string
+              enum: [page, popup, touch, wap]
+            claims:
+              type: string
+              description: JSON-encoded claims request (OIDC Core §5.5).
+            authorization_details:
+              type: string
+              description: JSON-encoded array of AuthorizationDetail (RFC 9396).
+            request:
+              type: string
+              description: Optional signed JWT request object (JAR, RFC 9101 §5).
+            dpop_jkt:
+              type: string
+              description: 'DPoP key thumbprint binding (RFC 9449 §10.1).'
 
     PARResponse:
+      description: |
+        RFC 9126 §2.2 — returned with HTTP 201 Created and a
+        `Cache-Control: no-store` header.
       type: object
       required: [request_uri, expires_in]
       properties:
@@ -997,32 +1450,51 @@ components:
           type: string
           format: uri
           description: |
-            Reference URI to be passed to `/authorize` in the
-            `request_uri` query parameter.
+            Reference URI to be passed to `/authorize` in the `request_uri`
+            query parameter. MUST start with the URN prefix
+            `urn:ietf:params:oauth:request_uri:` per RFC 9126 §2.2.
+          pattern: '^urn:ietf:params:oauth:request_uri:.+$'
           examples:
             - 'urn:ietf:params:oauth:request_uri:6esc_11ACC5bwc014ltc14eY22c'
         expires_in:
           type: integer
-          description: Lifetime in seconds of the `request_uri`.
+          minimum: 5
+          maximum: 600
+          description: |
+            Lifetime in seconds of the `request_uri`. Typical range is
+            5-600 seconds per RFC 9126 §2.2 guidance.
+          examples: [60]
 
     # -----------------------------------------------------------------
     # Introspection — RFC 7662
     # -----------------------------------------------------------------
     IntrospectionRequest:
-      type: object
-      required: [token]
-      properties:
-        token:
-          type: string
-        token_type_hint:
-          type: string
-          enum: [access_token, refresh_token]
-          description: Hint to the server about which token type is being introspected.
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The token to introspect (access or refresh token).
+            token_type_hint:
+              type: string
+              description: |
+                Hint to the AS about the type of token being introspected.
+                Values come from the IANA OAuth Token Type Hint registry
+                (RFC 7009 §4.1.2); the schema is kept open rather than a
+                closed enum so future registrations work without spec churn.
+              examples: [access_token, refresh_token]
 
     IntrospectionResponse:
-      description: RFC 7662 §2.2
+      description: |
+        RFC 7662 §2.2. Always returned with HTTP 200, even for inactive
+        tokens (then only `{"active": false}` is included). Open to
+        registered extension members per §2.2 — `cnf` (RFC 7800), DPoP
+        binding (RFC 9449), `authorization_details` (RFC 9396 §9), etc.
       type: object
       required: [active]
+      additionalProperties: true
       properties:
         active:
           type: boolean
@@ -1037,39 +1509,57 @@ components:
           type: string
         token_type:
           type: string
+          description: 'Typically `Bearer` (RFC 6750) or `DPoP` (RFC 9449).'
         exp:
-          type: integer
-          description: Expiration time (seconds since epoch).
+          $ref: '#/components/schemas/NumericDate'
+          description: Expiration time (seconds since 1970-01-01T00:00:00Z).
         iat:
-          type: integer
-          description: Issued at (seconds since epoch).
+          $ref: '#/components/schemas/NumericDate'
+          description: Issued at (seconds since 1970-01-01T00:00:00Z).
         nbf:
-          type: integer
+          $ref: '#/components/schemas/NumericDate'
         sub:
           type: string
         aud:
           oneOf:
-            - type: string
+            - $ref: '#/components/schemas/StringOrURI'
             - type: array
               items:
-                type: string
+                $ref: '#/components/schemas/StringOrURI'
         iss:
-          type: string
+          $ref: '#/components/schemas/StringOrURI'
         jti:
           type: string
+        cnf:
+          $ref: '#/components/schemas/Confirmation'
+          description: |
+            Confirmation method (RFC 7800) — present for sender-constrained
+            tokens (DPoP `cnf.jkt` per RFC 9449 §6.1, mTLS `cnf.x5t#S256`
+            per RFC 8705 §3.2).
+        authorization_details:
+          type: array
+          description: 'RAR (RFC 9396 §9): granted authorization details for this token.'
+          items:
+            $ref: '#/components/schemas/AuthorizationDetail'
 
     # -----------------------------------------------------------------
     # Revocation — RFC 7009
     # -----------------------------------------------------------------
     RevocationRequest:
-      type: object
-      required: [token]
-      properties:
-        token:
-          type: string
-        token_type_hint:
-          type: string
-          enum: [access_token, refresh_token]
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthFields'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The token (access or refresh) to revoke.
+            token_type_hint:
+              type: string
+              description: |
+                Hint to the AS about the token type. Open per IANA OAuth
+                Token Type Hint registry (RFC 7009 §4.1.2).
+              examples: [access_token, refresh_token]
 
     # -----------------------------------------------------------------
     # JWKS — RFC 7517
@@ -1086,65 +1576,117 @@ components:
     JWK:
       type: object
       required: [kty]
+      additionalProperties: true
       description: |
-        Selected JWK fields. The full schema depends on `kty` (key type) —
-        `RSA`, `EC`, `OKP`, `oct`. See RFC 7517 §4 and RFC 7518.
+        JSON Web Key per RFC 7517 §4. Algorithm-specific parameters are
+        defined in RFC 7518 (JWA) and RFC 8037 (OKP). The `kty` enum is
+        kept open per the IANA registry — additional key types (e.g.
+        post-quantum) may appear over time.
       properties:
         kty:
           type: string
-          enum: [RSA, EC, OKP, oct]
+          description: 'Key Type (RFC 7517 §4.1) — IANA-registered.'
+          examples: [RSA, EC, OKP, oct]
         use:
           type: string
           enum: [sig, enc]
+          description: |
+            Public Key Use (§4.2). `sig` for signature, `enc` for
+            encryption. MUST be disjoint with `key_ops`.
         key_ops:
           type: array
+          description: |
+            Allowed key operations (§4.3). Values are from the IANA
+            JSON Web Key Operations registry (§8.3): `sign`, `verify`,
+            `encrypt`, `decrypt`, `wrapKey`, `unwrapKey`, `deriveKey`,
+            `deriveBits`. MUST be disjoint with `use`.
           items:
             type: string
+            enum: [sign, verify, encrypt, decrypt, wrapKey, unwrapKey, deriveKey, deriveBits]
         alg:
           type: string
-          examples: [RS256, ES256, EdDSA]
+          description: 'Algorithm intended for use with the key (§4.4).'
+          examples: [RS256, RS384, RS512, ES256, ES384, ES512, EdDSA, PS256, HS256]
         kid:
           type: string
+          description: 'Key ID for selection in a JWKS (§4.5).'
         x5u:
           type: string
           format: uri
+          description: 'URL of an X.509 certificate or chain (§4.6).'
         x5c:
           type: array
+          description: |
+            X.509 certificate chain (§4.7). Each item is a **base64-encoded**
+            (NOT base64url-encoded) DER PKIX certificate. The first entry is
+            the certificate corresponding to the public key.
           items:
             type: string
         x5t:
           type: string
+          description: 'X.509 SHA-1 thumbprint (§4.8); base64url-encoded.'
         'x5t#S256':
           type: string
+          description: 'X.509 SHA-256 thumbprint (§4.9); base64url-encoded.'
+        # RSA (RFC 7518 §6.3)
         n:
           type: string
-          description: 'RSA modulus (base64url).'
+          description: 'RSA modulus, base64url-encoded.'
         e:
           type: string
-          description: 'RSA exponent (base64url).'
+          description: 'RSA exponent, base64url-encoded.'
+        # EC + OKP (RFC 7518 §6.2 + RFC 8037)
         crv:
           type: string
-          description: 'EC/OKP curve (e.g. P-256, Ed25519).'
+          description: |
+            Curve identifier. EC: `P-256`, `P-384`, `P-521`,
+            `secp256k1`. OKP (RFC 8037): `Ed25519`, `Ed448`, `X25519`, `X448`.
         x:
           type: string
+          description: 'EC/OKP x coordinate or public key, base64url.'
         y:
           type: string
+          description: 'EC y coordinate, base64url. Not used for OKP.'
+        # oct (RFC 7518 §6.4) — symmetric keys
+        k:
+          type: string
+          description: 'Symmetric key value (oct kty), base64url-encoded.'
 
     # -----------------------------------------------------------------
     # Discovery document — OIDC Discovery 1.0 + RFC 8414
     # -----------------------------------------------------------------
     DiscoveryDocument:
       description: |
-        Provider metadata. The OIDC Discovery superset includes additional
-        `*_supported` fields; RFC 8414 (OAuth-only) defines the same shape
-        with fewer required fields.
+        Provider metadata. The OIDC Discovery 1.0 §3 superset of RFC 8414 §2
+        is modeled here. For an OAuth-only AS (no OIDC), the OIDC-specific
+        fields (`userinfo_endpoint`, `subject_types_supported`,
+        `id_token_signing_alg_values_supported`, plus the `userinfo_*` and
+        `id_token_*` algorithm arrays) MAY be omitted.
+
+        For OIDC providers, the spec's `required` block reflects OIDC's
+        REQUIRED set. RFC 8414's smaller required set
+        (`issuer`, `response_types_supported`) is a strict subset.
       type: object
-      required: [issuer, authorization_endpoint, token_endpoint, response_types_supported]
+      additionalProperties: true
+      required:
+        # OIDC Discovery 1.0 §3 REQUIRED + RFC 8414 §2 REQUIRED.
+        - issuer
+        - authorization_endpoint
+        - token_endpoint
+        - jwks_uri
+        - response_types_supported
+        - subject_types_supported
+        - id_token_signing_alg_values_supported
       properties:
+
+        # ---- Endpoints (RFC 8414 §2 + OIDC Discovery §3 + extensions) ----
         issuer:
           type: string
           format: uri
-          description: Canonical issuer URL — MUST equal the host the document was fetched from.
+          description: |
+            Canonical issuer URL using HTTPS (no query/fragment). MUST be
+            byte-identical to the value in tokens' `iss` claim and to the
+            base of the discovery URL.
         authorization_endpoint:
           type: string
           format: uri
@@ -1154,10 +1696,11 @@ components:
         userinfo_endpoint:
           type: string
           format: uri
-          description: 'OIDC: required if the provider supports it.'
+          description: 'OIDC: RECOMMENDED. Standard claim Endpoint per OIDC Core §5.3.'
         jwks_uri:
           type: string
           format: uri
+          description: HTTPS URL of the JWK Set. REQUIRED for OIDC.
         registration_endpoint:
           type: string
           format: uri
@@ -1165,35 +1708,69 @@ components:
         introspection_endpoint:
           type: string
           format: uri
+          description: Token Introspection endpoint (RFC 7662).
         revocation_endpoint:
           type: string
           format: uri
+          description: Token Revocation endpoint (RFC 7009).
         device_authorization_endpoint:
           type: string
           format: uri
+          description: Device Authorization endpoint (RFC 8628).
         pushed_authorization_request_endpoint:
           type: string
           format: uri
+          description: Pushed Authorization Request endpoint (RFC 9126).
+        backchannel_authentication_endpoint:
+          type: string
+          format: uri
+          description: OIDC CIBA backchannel authentication endpoint.
         end_session_endpoint:
           type: string
           format: uri
-          description: 'OIDC RP-Initiated Logout endpoint.'
+          description: OIDC RP-Initiated Logout endpoint.
+        check_session_iframe:
+          type: string
+          format: uri
+          description: 'OIDC Session Management 1.0: HTML iframe URL for session-state polling.'
+        mtls_endpoint_aliases:
+          type: object
+          description: |
+            RFC 8705 §5: aliases for endpoints when accessed via mutual TLS,
+            allowing the AS to expose mTLS-only variants of token,
+            revocation, introspection, etc.
+          properties:
+            token_endpoint: { type: string, format: uri }
+            revocation_endpoint: { type: string, format: uri }
+            introspection_endpoint: { type: string, format: uri }
+            device_authorization_endpoint: { type: string, format: uri }
+            pushed_authorization_request_endpoint: { type: string, format: uri }
+            userinfo_endpoint: { type: string, format: uri }
+            registration_endpoint: { type: string, format: uri }
+          additionalProperties:
+            type: string
+            format: uri
+
+        # ---- Capability/feature arrays ----
         scopes_supported:
           type: array
-          items:
-            type: string
+          items: { type: string }
         response_types_supported:
           type: array
-          items:
-            type: string
+          items: { type: string }
+          description: |
+            REQUIRED. For OIDC dynamic providers, MUST include `code`,
+            `id_token`, and `token id_token` per OIDC Core §3.
         response_modes_supported:
           type: array
           items:
             type: string
+            enum: [query, fragment, form_post, jwt, query.jwt, fragment.jwt, form_post.jwt]
+          description: 'Default if omitted: `["query", "fragment"]`.'
         grant_types_supported:
           type: array
-          items:
-            type: string
+          items: { type: string }
+          description: 'Default if omitted: `["authorization_code", "implicit"]` per RFC 8414. (Implicit is deprecated by OAuth 2.1.)'
         token_endpoint_auth_methods_supported:
           type: array
           items:
@@ -1206,37 +1783,202 @@ components:
               - private_key_jwt
               - tls_client_auth
               - self_signed_tls_client_auth
+          description: 'Default if omitted: `["client_secret_basic"]`.'
+        token_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+          description: |
+            REQUIRED when `client_secret_jwt` or `private_key_jwt` appears in
+            `token_endpoint_auth_methods_supported`. Lists JWS `alg` values
+            accepted for the `client_assertion` JWT.
+        revocation_endpoint_auth_methods_supported:
+          type: array
+          items: { type: string }
+        revocation_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        introspection_endpoint_auth_methods_supported:
+          type: array
+          items: { type: string }
+        introspection_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- ID token signing/encryption (OIDC Discovery §3) ----
         id_token_signing_alg_values_supported:
           type: array
-          items:
-            type: string
+          items: { type: string }
+          description: REQUIRED for OIDC. MUST include `RS256` per OIDC Core §15.1.
+        id_token_encryption_alg_values_supported:
+          type: array
+          items: { type: string }
+        id_token_encryption_enc_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- UserInfo signing/encryption (OIDC Discovery §3) ----
+        userinfo_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        userinfo_encryption_alg_values_supported:
+          type: array
+          items: { type: string }
+        userinfo_encryption_enc_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- Request object signing/encryption (OIDC Discovery §3 + JAR) ----
+        request_object_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        request_object_encryption_alg_values_supported:
+          type: array
+          items: { type: string }
+        request_object_encryption_enc_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- Subject + claims (OIDC Discovery §3) ----
         subject_types_supported:
           type: array
           items:
             type: string
             enum: [public, pairwise]
+          description: REQUIRED for OIDC.
         claims_supported:
+          type: array
+          items: { type: string }
+          description: 'OIDC: list of standard claim names the OP MAY supply.'
+        claim_types_supported:
           type: array
           items:
             type: string
+            enum: [normal, aggregated, distributed]
+          description: 'OIDC: claim types supported. Default: `["normal"]`.'
+        claims_locales_supported:
+          type: array
+          items: { type: string }
+        claims_parameter_supported:
+          type: boolean
+          description: Whether the OP supports the `claims` request parameter (OIDC Core §5.5).
+          default: false
+
+        # ---- UI / locales (OIDC Discovery §3) ----
+        display_values_supported:
+          type: array
+          items:
+            type: string
+            enum: [page, popup, touch, wap]
+        ui_locales_supported:
+          type: array
+          items: { type: string }
+        acr_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- Request handling (OIDC Discovery §3 + JAR + PAR) ----
+        request_parameter_supported:
+          type: boolean
+          description: Whether the OP supports the `request` parameter (OIDC Core §6, RFC 9101 JAR).
+          default: false
+        request_uri_parameter_supported:
+          type: boolean
+          description: Whether the OP supports the `request_uri` parameter (OIDC Core §6, RFC 9126 PAR).
+          default: true
+        require_request_uri_registration:
+          type: boolean
+          description: Whether `request_uri` values MUST be pre-registered.
+          default: false
+        require_pushed_authorization_requests:
+          type: boolean
+          description: 'PAR (RFC 9126): if true, `/authorize` MUST be reached via `request_uri` from PAR.'
+          default: false
+
+        # ---- PKCE (RFC 7636 + RFC 8414) ----
         code_challenge_methods_supported:
           type: array
           items:
             type: string
-            enum: [S256, plain]
-        require_pushed_authorization_requests:
-          type: boolean
-          description: 'PAR (RFC 9126): if true, `/authorize` MUST be reached via PAR.'
+            enum: [S256]
+          description: |
+            PKCE methods supported. Under OAuth 2.1 / RFC 9700 §4.8 the
+            value MUST be `["S256"]`; the legacy `plain` method is omitted.
+
+        # ---- DPoP (RFC 9449) ----
         dpop_signing_alg_values_supported:
           type: array
-          items:
-            type: string
-          description: 'DPoP (RFC 9449): supported signing algorithms.'
+          items: { type: string }
+
+        # ---- mTLS (RFC 8705) ----
+        tls_client_certificate_bound_access_tokens:
+          type: boolean
+          description: |
+            Whether the AS issues access tokens bound to a TLS client
+            certificate's hash (cnf.x5t#S256). RFC 8705 §3.
+          default: false
+
+        # ---- RAR (RFC 9396) ----
         authorization_details_types_supported:
+          type: array
+          items: { type: string }
+
+        # ---- Issuer Identifier (RFC 9207) ----
+        authorization_response_iss_parameter_supported:
+          type: boolean
+          description: |
+            Whether the AS includes an `iss` parameter in authorization
+            responses for mix-up attack prevention. RFC 9207.
+          default: false
+
+        # ---- OIDC Logout 1.0 ----
+        frontchannel_logout_supported:
+          type: boolean
+          default: false
+        frontchannel_logout_session_supported:
+          type: boolean
+          default: false
+        backchannel_logout_supported:
+          type: boolean
+          default: false
+        backchannel_logout_session_supported:
+          type: boolean
+          default: false
+        http_logout_supported:
+          type: boolean
+          description: Legacy OIDC HTTP-Based Logout (older Microsoft).
+          default: false
+
+        # ---- CIBA (OIDC) ----
+        backchannel_token_delivery_modes_supported:
           type: array
           items:
             type: string
-          description: 'RAR (RFC 9396): supported authorization detail types.'
+            enum: [poll, ping, push]
+        backchannel_user_code_parameter_supported:
+          type: boolean
+          default: false
+        backchannel_authentication_request_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- Documentation links (OIDC Discovery §3) ----
+        service_documentation:
+          type: string
+          format: uri
+        op_policy_uri:
+          type: string
+          format: uri
+        op_tos_uri:
+          type: string
+          format: uri
+
+        # ---- Signed metadata (RFC 8414 §2.1) ----
+        signed_metadata:
+          type: string
+          description: |
+            JWT containing all of the above metadata, signed by the AS.
+            When present, takes precedence over individual fields per
+            RFC 8414 §3.1.
 
     # -----------------------------------------------------------------
     # UserInfo — OIDC Core §5
@@ -1305,7 +2047,224 @@ components:
             country:
               type: string
         updated_at:
-          type: integer
+          $ref: '#/components/schemas/NumericDate'
+
+    UserInfoSignedResponse:
+      description: |
+        UserInfo claims wrapped in a JWT (signed and/or encrypted) per
+        OIDC Core §5.3.2. When the `Accept` is `application/jwt`, the
+        response body is a compact-serialized JWT whose payload includes
+        `iss` (REQUIRED — the OP) and `aud` (REQUIRED — the requesting
+        client) in addition to the standard claims.
+      allOf:
+        - type: object
+          required: [iss, aud, sub]
+          properties:
+            iss:
+              $ref: '#/components/schemas/StringOrURI'
+            aud:
+              oneOf:
+                - $ref: '#/components/schemas/StringOrURI'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/StringOrURI'
+        - $ref: '#/components/schemas/UserInfoResponse'
+
+    # -----------------------------------------------------------------
+    # JWT primitives — RFC 7519 §2 helpers (used across schemas)
+    # -----------------------------------------------------------------
+    JWT:
+      type: string
+      description: |
+        A JWT in JWS Compact Serialization format per RFC 7519 §3 — three
+        base64url segments separated by dots: `header.payload.signature`.
+        For JWE-encrypted JWTs, five segments separated by dots.
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)?$'
+      examples: ['eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature_here']
+
+    StringOrURI:
+      type: string
+      description: |
+        Per RFC 7519 §2: an arbitrary string value; if the string contains a
+        `:` character, it MUST be a URI per RFC 3986. Used for `iss`, `aud`,
+        `sub`, `jti` JWT claims.
+
+    NumericDate:
+      type: number
+      description: |
+        Per RFC 7519 §2: number containing seconds since 1970-01-01T00:00:00Z UTC,
+        ignoring leap seconds. NOT necessarily an integer — fractional seconds
+        are permitted.
+      examples: [1735689600, 1735689600.123]
+
+    # -----------------------------------------------------------------
+    # ID Token claims — OIDC Core §2 (decoded payload of TokenResponse.id_token)
+    # -----------------------------------------------------------------
+    IDTokenClaims:
+      description: |
+        Decoded payload of an OIDC ID Token. The wire form is a signed JWT
+        carried in `TokenResponse.id_token`; this schema documents the
+        payload shape so consumers can model the decoded claims.
+      type: object
+      required: [iss, sub, aud, exp, iat]
+      additionalProperties: true
+      properties:
+        iss:
+          $ref: '#/components/schemas/StringOrURI'
+          description: REQUIRED. Issuer Identifier — MUST equal the OP's `issuer`.
+        sub:
+          type: string
+          description: REQUIRED. Subject identifier (locally unique within the issuer).
+        aud:
+          description: REQUIRED. Audience(s) — MUST contain the requesting client_id.
+          oneOf:
+            - $ref: '#/components/schemas/StringOrURI'
+            - type: array
+              items:
+                $ref: '#/components/schemas/StringOrURI'
+        exp:
+          $ref: '#/components/schemas/NumericDate'
+          description: REQUIRED. Expiration time.
+        iat:
+          $ref: '#/components/schemas/NumericDate'
+          description: REQUIRED. Issued at.
+        auth_time:
+          $ref: '#/components/schemas/NumericDate'
+          description: REQUIRED if `max_age` was requested or `auth_time` is essential.
+        nonce:
+          type: string
+          description: REQUIRED if `nonce` was sent in the auth request.
+        acr:
+          type: string
+          description: Authentication Context Class Reference.
+        amr:
+          type: array
+          items: { type: string }
+          description: Authentication Methods Reference (RFC 8176).
+        azp:
+          type: string
+          description: Authorized party — REQUIRED when `aud` has multiple values.
+
+    # -----------------------------------------------------------------
+    # JWT Profile for Access Tokens — RFC 9068 §2.2
+    # -----------------------------------------------------------------
+    JWTAccessTokenClaims:
+      description: |
+        Decoded payload of a JWT-profile access token per RFC 9068 §2.2.
+        Wire form is a signed JWT with JOSE header `typ: at+jwt`. When an
+        AS issues JWT access tokens (advertised via signing alg arrays in
+        discovery), `TokenResponse.access_token` will be one of these.
+      type: object
+      required: [iss, exp, aud, sub, client_id, iat, jti]
+      additionalProperties: true
+      properties:
+        iss:
+          $ref: '#/components/schemas/StringOrURI'
+          description: REQUIRED. Issuer Identifier of the AS.
+        exp:
+          $ref: '#/components/schemas/NumericDate'
+        aud:
+          description: REQUIRED. Resource server identifier(s).
+          oneOf:
+            - $ref: '#/components/schemas/StringOrURI'
+            - type: array
+              items:
+                $ref: '#/components/schemas/StringOrURI'
+        sub:
+          type: string
+          description: |
+            REQUIRED. End-user's identifier; for `client_credentials` grant
+            this MUST equal `client_id`.
+        client_id:
+          type: string
+          description: REQUIRED. Identifier of the OAuth client.
+        iat:
+          $ref: '#/components/schemas/NumericDate'
+        jti:
+          type: string
+          description: REQUIRED. Unique identifier for replay protection.
+        auth_time:
+          $ref: '#/components/schemas/NumericDate'
+        acr:
+          type: string
+        amr:
+          type: array
+          items: { type: string }
+        scope:
+          type: string
+          description: 'OAuth scopes granted (space-delimited).'
+        groups:
+          type: array
+          items: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+        entitlements:
+          type: array
+          items: { type: string }
+        cnf:
+          $ref: '#/components/schemas/Confirmation'
+          description: |
+            Confirmation method (RFC 7800) — present for sender-constrained
+            tokens (DPoP `cnf.jkt` per RFC 9449 §6.1, mTLS `cnf.x5t#S256`
+            per RFC 8705).
+
+    Confirmation:
+      type: object
+      description: 'Token-binding confirmation methods per RFC 7800.'
+      properties:
+        jkt:
+          type: string
+          description: |
+            JWK SHA-256 thumbprint per RFC 7638. Used for DPoP-bound
+            tokens (RFC 9449 §6.1).
+        'x5t#S256':
+          type: string
+          description: 'Certificate SHA-256 thumbprint for mTLS-bound tokens (RFC 8705 §3.1).'
+        jwk:
+          type: object
+          description: Embedded JWK; rarely used.
+        kid:
+          type: string
+
+    # -----------------------------------------------------------------
+    # Rich Authorization Requests — RFC 9396 §2
+    # -----------------------------------------------------------------
+    AuthorizationDetail:
+      description: |
+        A single authorization detail object per RFC 9396 §2. Sent in the
+        `authorization_details` parameter at `/authorize`, `/par`, and
+        `/token`; echoed back in token and introspection responses.
+        Type-specific fields are added by each `type`'s consuming RFC.
+      type: object
+      required: [type]
+      additionalProperties: true
+      properties:
+        type:
+          type: string
+          description: |
+            REQUIRED. Identifier of the authorization detail type, defined
+            by extending RFCs (e.g. `payment_initiation` for FAPI 2.0).
+        locations:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Resource server locations this detail applies to.
+        actions:
+          type: array
+          items: { type: string }
+          description: Permitted actions (e.g. `read`, `write`).
+        datatypes:
+          type: array
+          items: { type: string }
+          description: Data type categories (e.g. `account_info`).
+        identifier:
+          type: string
+          description: Type-specific identifier (e.g. an account number).
+        privileges:
+          type: array
+          items: { type: string }
 
   # ---------------------------------------------------------------------------
   # Security schemes
@@ -1315,40 +2274,67 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: 'OAuth 2.0 Bearer Token in the Authorization header (RFC 6750).'
+      description: |
+        OAuth 2.0 Bearer Token presentation per RFC 6750 §2.1
+        (`Authorization: Bearer <token>` header). The token format is
+        implementation-defined: it MAY be opaque (validated via
+        introspection — RFC 7662) or a JWT (RFC 9068 §2 — `typ: at+jwt`,
+        validated locally against `jwks_uri`). `bearerFormat` is intentionally
+        omitted because both forms are common in the wild.
 
     dpop:
-      type: http
-      scheme: dpop
+      type: apiKey
+      in: header
+      name: Authorization
       description: |
-        DPoP-bound access token. Both an `Authorization: DPoP <token>` header
-        AND a `DPoP: <proof-jwt>` header are required (RFC 9449).
+        DPoP-bound access token (RFC 9449). The HTTP Authorization header
+        carries `DPoP <access-token>`, and a SECOND `DPoP` header MUST also
+        be sent containing a fresh proof JWT (typ=`dpop+jwt`). OpenAPI 3.1
+        cannot natively model the second-header requirement under a single
+        `securityScheme`; operations using DPoP also accept the `DPoP`
+        request-header parameter (`components.parameters.DPoPHeader`) to
+        document it. RFC 9449 §7.1 also defines a DPoP `WWW-Authenticate`
+        challenge with an `algs` parameter for resource servers.
 
     clientSecretBasic:
       type: http
       scheme: basic
-      description: 'Client authentication via HTTP Basic with `client_id:client_secret` (RFC 6749 §2.3.1).'
+      description: |
+        Client authentication via HTTP Basic with `client_id:client_secret`
+        per RFC 6749 §2.3.1. PREFERRED over `clientSecretPost` per the same
+        section.
 
     clientSecretPost:
       type: apiKey
       in: header
       name: X-OAuth-Client-Secret-Post
       description: |
-        Client authentication via `client_id` and `client_secret` in the
-        request body (RFC 6749 §2.3.1). Marked apiKey/header here only because
-        OpenAPI lacks a body-credentials scheme; in practice these are
-        included in the form body.
+        Client authentication via `client_id` + `client_secret` form fields
+        in the request body (RFC 6749 §2.3.1). NOT RECOMMENDED — prefer
+        `clientSecretBasic`. This scheme is a documentation marker only;
+        OpenAPI lacks a body-credentials security type. In practice the
+        fields appear in `ClientAuthFields` and the operation's request body.
 
     clientAssertion:
       type: apiKey
       in: header
       name: X-OAuth-Client-Assertion
       description: |
-        `client_assertion` + `client_assertion_type` form fields (RFC 7521).
-        For `private_key_jwt` and `client_secret_jwt` authentication. Modeled
-        as apiKey because OpenAPI cannot natively express body-form
-        authentication.
+        Client authentication via JWT bearer assertion — form fields
+        `client_assertion_type` (the URN
+        `urn:ietf:params:oauth:client-assertion-type:jwt-bearer`) and
+        `client_assertion` (a JWT) per RFC 7523 §2.2. Used for
+        `client_secret_jwt` and `private_key_jwt`. This scheme is a
+        documentation marker only; the actual fields live in
+        `ClientAuthFields` (which is mixed into every token-endpoint-style
+        request schema).
+
+    mtls:
+      type: mutualTLS
+      description: |
+        Mutual TLS client authentication per RFC 8705. Either PKI-style
+        (`tls_client_auth`) or self-signed (`self_signed_tls_client_auth`)
+        as advertised in `token_endpoint_auth_methods_supported`.
 
     none:
       type: apiKey
@@ -1356,7 +2342,7 @@ components:
       name: X-No-Authentication
       description: |
         Public client — no client authentication. Permitted for native and
-        SPA clients per OAuth 2.1, provided PKCE is used.
+        SPA clients under OAuth 2.1, provided PKCE is used.
 
     oauth2:
       type: oauth2

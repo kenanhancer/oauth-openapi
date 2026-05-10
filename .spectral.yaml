@@ -1,1 +1,11 @@
 extends: ["spectral:oas"]
+
+# `oas3-unused-component` flags schemas that have no $ref pointing at them.
+# We intentionally keep some documentation-only schemas (e.g. IDTokenClaims,
+# JWTAccessTokenClaims) that describe the decoded payload of values that
+# travel as opaque strings on the wire — they cannot be $ref'd from any
+# operation but their documentation value justifies their inclusion. We
+# downgrade the rule to `hint` so it stays visible (not silenced) while not
+# failing the lint.
+rules:
+  oas3-unused-component: hint
