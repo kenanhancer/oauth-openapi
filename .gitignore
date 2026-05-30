@@ -6,6 +6,7 @@
 node_modules/
 dist/
 build/
+generated/
 *.log
 .env
 .env.local
