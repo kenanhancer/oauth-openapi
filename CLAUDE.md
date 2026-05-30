@@ -6,10 +6,22 @@ time.
 
 ## Purpose
 
-`oauth-openapi.yaml` is a vendor-agnostic, RFC-canonical OpenAPI 3.1 spec of
-the OAuth 2.0 + OpenID Connect authorization-server protocol surface. The spec
-itself is the deliverable; everything else (tools/, references/, slash
-commands) exists to support working on it.
+This repository exists to **deeply understand OAuth 2.0 + OpenID Connect by
+building a canonical spec from the source RFCs.** The working artifact is
+`oauth-openapi.yaml` — a vendor-agnostic, RFC-canonical OpenAPI 3.1 description
+of every grant type, endpoint, and modern extension through 2025.
+
+The spec is the teaching aid, not the end goal. The intended workflow is:
+read the relevant RFC (text vendored under `references/rfc-sources/`) → encode
+the shape in YAML with `externalDocs` pointing back to the clause → cross-check
+against `references/RFC_AUDIT_SYNTHESIS.md` → run `openapi-generator` to
+scaffold a server in Python (FastAPI), Node.js (Express), C# (ASP.NET Core),
+Java (Spring Boot), Go, etc., and see the protocol made concrete. Everything
+else (`tools/`, `references/`, slash commands) exists to support that loop.
+
+When suggesting changes, prefer explanations that tie each YAML edit back to
+its RFC clause — the goal is learning the protocol, not just keeping the spec
+file passing lint.
 
 ## Commit conventions
 
@@ -47,8 +59,15 @@ signal that the schema is dead code.
 - `tools/` — generic developer scripts. Anything here should work in another
   project unchanged (drop the `.sh` into a sibling repo and run it). Each
   tool is documented in `tools/README.md`.
-- `references/` — historical reference specs (IBM, ybelenko). Read-only;
-  never overwrite or "fix" them — they document the past, not the present.
+- `references/` — mixed, with different rules per area:
+  - `ibm-api-connect-oauth.yaml`, `ybelenko-oauth2-endpoints.yaml` — historical
+    community specs. **Read-only**; never overwrite or "fix" them — they
+    document the past, not the present.
+  - `rfc-sources/` — vendored canonical RFC/draft text. **Refreshable**: re-pull
+    when a draft revises (see `rfc-sources/README.md` for the procedure).
+    Published RFC bytes never change; the OAuth 2.1 draft does.
+  - `rfc-validation/`, `RFC_AUDIT_SYNTHESIS.md`, `NOTES.md`,
+    `REAL_WORLD_COMPARISON.md` — audit evidence; update when re-auditing.
 - `.claude/` — Claude Code project config (permissions + slash commands).
   Do not add user-specific overrides; those go in `.claude/settings.local.json`.
 
@@ -82,8 +101,8 @@ them.
 - Hooks (in `settings.json`) — pre-commit lint belongs in a real git hook
   (e.g. `pre-commit` framework or `.git/hooks/pre-commit`), not Claude hooks,
   so it works for non-Claude users too.
-- Generated client SDKs — kept in `.gitignore` if anyone runs the
-  openapi-generator commands; not committed to the repo.
+- Generated client SDKs and server scaffolds — the `generated/` directory is
+  gitignored; never commit generator output.
 
 ## Out-of-scope reminders
 
