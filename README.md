@@ -3,6 +3,32 @@
 A vendor-agnostic, RFC-canonical OpenAPI 3.1 specification of the OAuth 2.0 +
 OpenID Connect authorization-server protocol surface.
 
+## Learning goal
+
+The primary aim of this repository is **to deeply understand OAuth 2.0 grant
+types and flows** by working through the authoritative IETF RFCs, distilling
+them into a single machine-readable spec, and turning that spec into running
+server scaffolds in multiple languages.
+
+The arc is three steps:
+
+1. **Read the RFCs.** Canonical source text is vendored under
+   `references/rfc-sources/` so each part of the spec can be cross-checked
+   against authoritative material. `references/RFC_AUDIT_SYNTHESIS.md` walks
+   through the audit that reconciled the spec against 20 RFCs and related
+   specs.
+2. **Encode the protocol.** Every endpoint, parameter, grant type, and error
+   response is a typed YAML entry in `oauth-openapi.yaml`, with `externalDocs`
+   pointing back to the RFC clause that justifies it.
+3. **Generate servers.** A single `openapi-generator` command turns the spec
+   into a FastAPI / Express / ASP.NET Core / Spring Boot / Go server scaffold
+   — making the protocol concrete enough to run and inspect, not just read
+   about. See [Generate servers and clients](#generate-servers-and-clients)
+   below.
+
+The spec is the teaching aid; the generated servers are the final proof that
+the model is faithful to the standard.
+
 ## Why this exists
 
 There is no official OpenAPI specification for OAuth 2.0. RFC 6749 was published
@@ -29,7 +55,7 @@ This project is a fresh OpenAPI 3.1 spec that:
 
 ## What's covered
 
-`oauth-openapi.yaml` (1413 lines) describes:
+`oauth-openapi.yaml` describes:
 
 ### Endpoints
 
@@ -69,11 +95,14 @@ The deprecated `password` and `implicit` grants are intentionally excluded.
 | RFC 7009 | 2013 | Token Revocation |
 | RFC 7517 | 2015 | JSON Web Key (JWK / JWKS) |
 | RFC 7519 | 2015 | JSON Web Token (JWT) |
+| RFC 7523 | 2015 | JWT Bearer — client auth & authorization grant |
 | RFC 7636 | 2015 | PKCE — Proof Key for Code Exchange |
 | RFC 7662 | 2015 | Token Introspection |
 | RFC 8414 | 2018 | Authorization Server Metadata |
+| RFC 8705 | 2018 | Mutual-TLS client auth & certificate-bound tokens |
 | RFC 8628 | 2019 | Device Authorization Grant |
 | RFC 8693 | 2020 | Token Exchange |
+| RFC 8707 | 2020 | Resource Indicators |
 | RFC 9068 | 2021 | JWT Profile for OAuth 2.0 Access Tokens |
 | RFC 9126 | 2021 | Pushed Authorization Requests (PAR) |
 | RFC 9396 | 2023 | Rich Authorization Requests (RAR) |
@@ -104,31 +133,60 @@ UI (`swagger-ui-watcher`, `swagger-ui-cli`, `swagger-ui-live`) are either
 broken, abandoned, or bundle an older Swagger Editor that does not support
 OpenAPI 3.1. SmartBear publishes the [`swagger-ui-dist`](https://www.npmjs.com/package/swagger-ui-dist)
 library but never shipped a CLI for it. `tools/serve-swagger-ui.sh` is a
-generic, ~250-line bash script that fills that gap — see
+generic, production-grade bash script that fills that gap — see
 [`tools/README.md`](tools/README.md) for full options, exit codes, and design
 notes.
 
-### Generate clients
+### Generate servers and clients
+
+The spec is valid OpenAPI 3.1, so any generator that understands 3.1 can
+scaffold both server stubs and client SDKs from it. **Servers are the more
+useful artifact for learning** — the generated routes, parameters, content
+types, and response shapes show exactly what each grant requires, end to end.
+
+#### Servers
 
 ```bash
-# Python client
+# Python — FastAPI
 npx @openapitools/openapi-generator-cli generate \
-  -i oauth-openapi.yaml \
-  -g python \
-  -o generated/python
+  -i oauth-openapi.yaml -g python-fastapi -o generated/server-fastapi
 
-# TypeScript client
+# Node.js — Express
 npx @openapitools/openapi-generator-cli generate \
-  -i oauth-openapi.yaml \
-  -g typescript-axios \
-  -o generated/typescript
+  -i oauth-openapi.yaml -g nodejs-express-server -o generated/server-express
 
-# Go client
+# C# — ASP.NET Core
 npx @openapitools/openapi-generator-cli generate \
-  -i oauth-openapi.yaml \
-  -g go \
-  -o generated/go
+  -i oauth-openapi.yaml -g aspnetcore -o generated/server-aspnetcore
+
+# Java — Spring Boot
+npx @openapitools/openapi-generator-cli generate \
+  -i oauth-openapi.yaml -g spring -o generated/server-spring
+
+# Go — net/http
+npx @openapitools/openapi-generator-cli generate \
+  -i oauth-openapi.yaml -g go-server -o generated/server-go
 ```
+
+#### Clients
+
+```bash
+# Python
+npx @openapitools/openapi-generator-cli generate \
+  -i oauth-openapi.yaml -g python -o generated/client-python
+
+# TypeScript (Axios)
+npx @openapitools/openapi-generator-cli generate \
+  -i oauth-openapi.yaml -g typescript-axios -o generated/client-typescript
+
+# Go
+npx @openapitools/openapi-generator-cli generate \
+  -i oauth-openapi.yaml -g go -o generated/client-go
+```
+
+`generated/` is gitignored — re-run the generator any time the spec changes.
+For the full list of supported targets, see
+`npx @openapitools/openapi-generator-cli list`.
 
 ### Lint
 
@@ -182,8 +240,9 @@ machine-readably, with the remaining 10% (browser flows) documented in prose.
 oauth-openapi/
 ├── README.md                              this file
 ├── CLAUDE.md                              Claude Code project conventions
-├── oauth-openapi.yaml                     the spec (1413 lines)
+├── oauth-openapi.yaml                     the OpenAPI 3.1 spec (source of truth)
 ├── .spectral.yaml                         Spectral lint config (extends spectral:oas)
+├── openapitools.json                      openapi-generator version pin (7.14.0)
 ├── .gitignore
 ├── .claude/                               Claude Code project config
 │   ├── settings.json                      tool permissions for the dev workflow
@@ -195,7 +254,11 @@ oauth-openapi/
 │   ├── README.md                          runbook for the scripts in this folder
 │   └── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
 └── references/
-    ├── NOTES.md                           description of the two reference specs
+    ├── NOTES.md                           description of the two community reference specs
+    ├── REAL_WORLD_COMPARISON.md           how the spec compares to live issuers (Google, Microsoft, etc.)
+    ├── RFC_AUDIT_SYNTHESIS.md             audit of the spec against 20 RFCs and related specs
+    ├── rfc-sources/                       vendored canonical RFC text snapshots — primary study material
+    ├── rfc-validation/                    per-RFC validation evidence backing the audit
     ├── ibm-api-connect-oauth.yaml         IBM's archived spec (Swagger 2.0, 2021)
     └── ybelenko-oauth2-endpoints.yaml     ybelenko's community spec (OpenAPI 3.0.2, 2021)
 ```
@@ -220,7 +283,6 @@ sessions to skip permission prompts.
 
 - [ ] Add Dynamic Client Registration (RFC 7591) endpoints
 - [ ] Add JAR (RFC 9101) request-object handling beyond what PAR already references
-- [ ] Add MTLS client authentication (RFC 8705) details
 - [ ] Add RAR `authorization_details` JSON Schema reference types
 - [ ] Add token-binding examples for DPoP
 - [ ] Add CIBA (Client-Initiated Backchannel Authentication) endpoints
