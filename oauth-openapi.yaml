@@ -236,9 +236,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenResponse'
         '400':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/OAuthErrorWithDPoPNonce'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
@@ -281,7 +281,7 @@ paths:
         '400':
           $ref: '#/components/responses/OAuthError'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
@@ -330,8 +330,10 @@ paths:
                   Signed/encrypted JWT containing the same claims, per the
                   JWT Response for OAuth Token Introspection draft (used
                   by FAPI 2.0).
-        '401':
+        '400':
           $ref: '#/components/responses/OAuthError'
+        '401':
+          $ref: '#/components/responses/IntrospectionAuthError'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
@@ -387,7 +389,7 @@ paths:
         '400':
           $ref: '#/components/responses/OAuthError'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
         - clientSecretPost: []
@@ -440,9 +442,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/PARResponse'
         '400':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/OAuthErrorWithDPoPNonce'
         '401':
-          $ref: '#/components/responses/OAuthError'
+          $ref: '#/components/responses/ClientAuthError'
         '405':
           description: 'Method Not Allowed (RFC 9126 §2.3) — only POST is permitted.'
         '413':
@@ -485,9 +487,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserInfoSignedResponse'
         '401':
-          $ref: '#/components/responses/BearerError'
+          $ref: '#/components/responses/ProtectedResourceError'
         '403':
-          $ref: '#/components/responses/BearerError'
+          $ref: '#/components/responses/ProtectedResourceError'
       security:
         - bearerAuth: []
         - dpop: []
@@ -515,9 +517,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserInfoSignedResponse'
         '401':
-          $ref: '#/components/responses/BearerError'
+          $ref: '#/components/responses/ProtectedResourceError'
         '403':
-          $ref: '#/components/responses/BearerError'
+          $ref: '#/components/responses/ProtectedResourceError'
       security:
         - bearerAuth: []
         - dpop: []
@@ -577,7 +579,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiscoveryDocument'
+                $ref: '#/components/schemas/OpenIDProviderMetadata'
 
   # =========================================================================
   # Discovery — RFC 8414 (OAuth without OIDC)
@@ -600,7 +602,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiscoveryDocument'
+                $ref: '#/components/schemas/OAuthServerMetadata'
 
 # =============================================================================
 # Components
@@ -910,23 +912,49 @@ components:
       schema:
         type: string
         const: 'no-cache'
-    WWWAuthenticateBearer:
+    WWWAuthenticateBearerDPoP:
       description: |
-        Bearer challenge from a protected resource (RFC 6750 §3). Format:
-        `Bearer realm="<realm>", scope="<space-list>", error="<code>",
-        error_description="<text>", error_uri="<uri>"`. All five parameters
-        are OPTIONAL but at least `error` is included on 401/403 responses.
+        Combined authentication challenge from a protected resource that
+        accepts BOTH Bearer (RFC 6750 §3) and DPoP-bound (RFC 9449 §7)
+        access tokens. RFC 9110 §11.6.1 permits a single response to
+        advertise multiple schemes in one header, and RFC 9449 §7.2 governs
+        how error information is distributed across them:
+          - no credentials sent -> challenge carries no error info (Fig 17)
+          - scheme unambiguous   -> error info on the used scheme  (Fig 18)
+          - scheme ambiguous     -> error info on both schemes     (Fig 19)
+        The DPoP `algs` parameter lists the JWS algorithms the resource
+        accepts for DPoP proofs (RFC 9449 §5). The standalone Bearer format
+        (RFC 6750 §3) is the same header without the trailing `DPoP` scheme.
       schema:
         type: string
-        examples: ['Bearer realm="api.example.com", error="invalid_token", error_description="The token expired"']
-    WWWAuthenticateDPoP:
+        examples:
+          - 'Bearer, DPoP algs="ES256 PS256"'
+          - 'Bearer error="invalid_token", error_description="The access token expired", DPoP algs="ES256 EdDSA"'
+    WWWAuthenticateBasic:
       description: |
-        DPoP challenge from a protected resource (RFC 9449 §7.1). Format
-        mirrors Bearer plus an `algs` parameter listing accepted DPoP
-        signing algorithms.
+        HTTP Basic challenge returned on a 401 from a client-authenticated
+        endpoint when the client used the `Authorization` header and the
+        credentials were invalid. RFC 6749 §5.2 REQUIRES the AS to emit a
+        `WWW-Authenticate` header matching the scheme the client used; for
+        `client_secret_basic` that scheme is Basic (RFC 7617).
       schema:
         type: string
-        examples: ['DPoP error="use_dpop_nonce", algs="ES256 EdDSA"']
+        examples:
+          - 'Basic realm="as.example.com"'
+          - 'Basic realm="as.example.com", error="invalid_client"'
+    WWWAuthenticateBasicBearer:
+      description: |
+        Combined challenge for the introspection endpoint, which authenticates
+        callers EITHER with client credentials (Basic, RFC 6749 §5.2) OR with
+        the protected resource's own bearer token (RFC 6750 §3). RFC 7662 §2.3
+        routes the failure to whichever was used, and RFC 9110 §11.6.1 permits
+        advertising both schemes in one header. DPoP is intentionally absent —
+        the introspection endpoint does not accept DPoP-bound tokens.
+      schema:
+        type: string
+        examples:
+          - 'Basic realm="as.example.com", Bearer'
+          - 'Bearer error="invalid_token", error_description="The access token expired"'
     DPoPNonce:
       description: |
         Server-issued nonce that MUST be echoed in the next DPoP proof's
@@ -950,24 +978,71 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    BearerError:
+    OAuthErrorWithDPoPNonce:
       description: |
-        Resource-server error per RFC 6750 §3 — includes a Bearer challenge
-        in the WWW-Authenticate header.
+        OAuth 2.0 error (RFC 6749 §5.2) at a DPoP-capable endpoint. When the
+        AS requires a DPoP nonce it answers `use_dpop_nonce` with HTTP 400 AND
+        a `DPoP-Nonce` header carrying the nonce to use in the retried proof
+        (RFC 9449 §8). The header is absent on other 400 errors.
       headers:
-        WWW-Authenticate:
-          $ref: '#/components/headers/WWWAuthenticateBearer'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControlNoStore'
+        Pragma:
+          $ref: '#/components/headers/PragmaNoCache'
+        DPoP-Nonce:
+          $ref: '#/components/headers/DPoPNonce'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-    DPoPError:
-      description: Resource-server error with a DPoP challenge (RFC 9449 §7.1).
+    ProtectedResourceError:
+      description: |
+        Authentication error from a protected resource that accepts both
+        Bearer and DPoP-bound access tokens (RFC 6750 §3, RFC 9449 §7.2).
+        The `WWW-Authenticate` header carries a combined challenge offering
+        both schemes (RFC 9110 §11.6.1); `DPoP-Nonce` is returned when the
+        resource requires the client to retry the DPoP proof with a
+        server-provided nonce (RFC 9449 §8, §9).
       headers:
         WWW-Authenticate:
-          $ref: '#/components/headers/WWWAuthenticateDPoP'
+          $ref: '#/components/headers/WWWAuthenticateBearerDPoP'
         DPoP-Nonce:
           $ref: '#/components/headers/DPoPNonce'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ClientAuthError:
+      description: |
+        Client authentication failed (`invalid_client`) on a token-family
+        endpoint. RFC 6749 §5.2: when the client authenticated via the
+        `Authorization` header, the AS MUST return 401 with a matching
+        `WWW-Authenticate` challenge. Used for HTTP 401 only — a malformed
+        request (HTTP 400) uses `OAuthError`, which needs no challenge.
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWWAuthenticateBasic'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControlNoStore'
+        Pragma:
+          $ref: '#/components/headers/PragmaNoCache'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    IntrospectionAuthError:
+      description: |
+        Authentication failed at the introspection endpoint. Per RFC 7662 §2.3
+        the AS returns 401 with a `WWW-Authenticate` challenge for the scheme
+        the caller used — Basic for client credentials (RFC 6749 §5.2) or
+        Bearer for a protected-resource access token (RFC 6750 §3).
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWWAuthenticateBasicBearer'
+        Cache-Control:
+          $ref: '#/components/headers/CacheControlNoStore'
+        Pragma:
+          $ref: '#/components/headers/PragmaNoCache'
       content:
         application/json:
           schema:
@@ -1116,8 +1191,10 @@ components:
 
     RefreshTokenRequest:
       description: |
-        RFC 6749 §6. Per OAuth 2.1 §4.3.1 and RFC 9700 §2.2.2 the refresh
-        token SHOULD be sender-constrained (DPoP) or rotated on every use.
+        RFC 6749 §6. Per OAuth 2.1 §4.3.1 and RFC 9700 §2.2.2, refresh tokens
+        issued to PUBLIC clients MUST be sender-constrained (DPoP) or rotated
+        on every use; for confidential clients this is RECOMMENDED (they are
+        already bound to the authenticating client).
       allOf:
         - $ref: '#/components/schemas/ClientAuthFields'
         - $ref: '#/components/schemas/ResourceIndicators'
@@ -1266,7 +1343,8 @@ components:
           description: |
             Optional refresh token (RFC 6749 §5.1). Per OAuth 2.1 §4.3.1
             and RFC 9700 §2.2.2, refresh tokens issued to public clients
-            SHOULD be sender-constrained (DPoP) or rotated on every use.
+            MUST be sender-constrained (DPoP) or rotated on every use;
+            RECOMMENDED for confidential clients.
         scope:
           type: string
           description: Granted scope, if different from what was requested.
@@ -1627,14 +1705,17 @@ components:
           enum: [sig, enc]
           description: |
             Public Key Use (§4.2). `sig` for signature, `enc` for
-            encryption. MUST be disjoint with `key_ops`.
+            encryption. `use` and `key_ops` SHOULD NOT be used together; if
+            both are present the information they convey MUST be consistent
+            (RFC 7517 §4.3).
         key_ops:
           type: array
           description: |
             Allowed key operations (§4.3). Values are from the IANA
             JSON Web Key Operations registry (§8.3): `sign`, `verify`,
             `encrypt`, `decrypt`, `wrapKey`, `unwrapKey`, `deriveKey`,
-            `deriveBits`. MUST be disjoint with `use`.
+            `deriveBits`. `key_ops` and `use` SHOULD NOT be used together; if
+            both are present they MUST be consistent (RFC 7517 §4.3).
           items:
             type: string
             enum: [sign, verify, encrypt, decrypt, wrapKey, unwrapKey, deriveKey, deriveBits]
@@ -1690,28 +1771,40 @@ components:
     # -----------------------------------------------------------------
     # Discovery document — OIDC Discovery 1.0 + RFC 8414
     # -----------------------------------------------------------------
-    DiscoveryDocument:
+    OpenIDProviderMetadata:
       description: |
-        Provider metadata. The OIDC Discovery 1.0 §3 superset of RFC 8414 §2
-        is modeled here. For an OAuth-only AS (no OIDC), the OIDC-specific
-        fields (`userinfo_endpoint`, `subject_types_supported`,
-        `id_token_signing_alg_values_supported`, plus the `userinfo_*` and
-        `id_token_*` algorithm arrays) MAY be omitted.
-
-        For OIDC providers, the spec's `required` block reflects OIDC's
-        REQUIRED set. RFC 8414's smaller required set
-        (`issuer`, `response_types_supported`) is a strict subset.
+        OpenID Provider metadata returned at
+        `/.well-known/openid-configuration` (OIDC Discovery 1.0 §3). It is the
+        OAuth 2.0 AS metadata plus the fields OIDC additionally makes REQUIRED.
+      allOf:
+        - $ref: '#/components/schemas/OAuthServerMetadata'
+        - type: object
+          required:
+            # OIDC Discovery 1.0 §3 REQUIRED beyond RFC 8414's set.
+            - authorization_endpoint
+            - token_endpoint
+            - jwks_uri
+            - subject_types_supported
+            - id_token_signing_alg_values_supported
+    OAuthServerMetadata:
+      description: |
+        OAuth 2.0 Authorization Server Metadata (RFC 8414 §2), returned at
+        `/.well-known/oauth-authorization-server` and reused as the base for
+        OIDC discovery. RFC 8414 makes only `issuer` and
+        `response_types_supported` UNCONDITIONALLY required; `jwks_uri` is
+        OPTIONAL, and `authorization_endpoint`/`token_endpoint` are required
+        only when a supported grant type uses them — so a valid plain-OAuth AS
+        may omit them. OIDC providers require a larger set (see
+        `OpenIDProviderMetadata`). The OIDC-specific fields
+        (`userinfo_endpoint`, `subject_types_supported`,
+        `id_token_signing_alg_values_supported`, and the `id_token_*`/
+        `userinfo_*` algorithm arrays) MAY be omitted by an OAuth-only AS.
       type: object
       additionalProperties: true
       required:
-        # OIDC Discovery 1.0 §3 REQUIRED + RFC 8414 §2 REQUIRED.
+        # RFC 8414 §2 unconditionally-REQUIRED metadata only.
         - issuer
-        - authorization_endpoint
-        - token_endpoint
-        - jwks_uri
         - response_types_supported
-        - subject_types_supported
-        - id_token_signing_alg_values_supported
       properties:
 
         # ---- Endpoints (RFC 8414 §2 + OIDC Discovery §3 + extensions) ----
@@ -2178,7 +2271,12 @@ components:
           description: Authentication Methods Reference (RFC 8176).
         azp:
           type: string
-          description: Authorized party — REQUIRED when `aud` has multiple values.
+          description: |
+            OPTIONAL. Authorized party — the party to which the ID Token was
+            issued (OIDC Core §2). Needed only when the ID Token has a SINGLE
+            audience that differs from the authorized party; if present it MUST
+            contain the `client_id`. It is NOT required merely because `aud`
+            has multiple values.
 
     # -----------------------------------------------------------------
     # JWT Profile for Access Tokens — RFC 9068 §2.2
