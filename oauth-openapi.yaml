@@ -153,7 +153,7 @@ paths:
             - on failure: `error`, `error_description`, `error_uri`, `state`,
               plus `iss` per RFC 9207.
 
-            OAuth 2.1 §7.5.4 / RFC 9700 §4.11 RECOMMEND HTTP 303 over 302
+            OAuth 2.1 §7.5.3 / RFC 9700 §4.12 RECOMMEND HTTP 303 over 302
             and PROHIBIT 307; both are modeled as alternative status codes.
           headers:
             Location:
@@ -165,7 +165,7 @@ paths:
                   - 'https://client.example.com/cb?code=SplxlOBeZQQYbYS6WxSbIA&state=xyz&iss=https%3A%2F%2Fas.example.com'
                   - 'https://client.example.com/cb?error=access_denied&state=xyz&iss=https%3A%2F%2Fas.example.com'
         '303':
-          description: 'Same as 302; RECOMMENDED status code per OAuth 2.1 §7.5.4.'
+          description: 'Same as 302; RECOMMENDED status code per OAuth 2.1 §7.5.3.'
           headers:
             Location:
               required: true
@@ -703,7 +703,7 @@ components:
       in: query
       required: true
       description: |
-        Always `S256` per OAuth 2.1 §4.8 and RFC 9700 §4.8. The legacy
+        Always `S256` per OAuth 2.1 §4.1.1 and RFC 9700 §4.8. The legacy
         `plain` method (RFC 7636 §4.4) is intentionally omitted; clients
         and servers compliant with OAuth 2.1 MUST use S256 only.
       schema:
