@@ -22,16 +22,24 @@ info:
     | RFC 7009 | 2013 | Token Revocation |
     | RFC 7517 | 2015 | JSON Web Key (JWK / JWKS) |
     | RFC 7519 | 2015 | JSON Web Token (JWT) |
+    | RFC 7523 | 2015 | JWT Bearer — client auth & authorization grant |
     | RFC 7636 | 2015 | PKCE — Proof Key for Code Exchange |
     | RFC 7662 | 2015 | Token Introspection |
     | RFC 8414 | 2018 | Authorization Server Metadata |
     | RFC 8628 | 2019 | Device Authorization Grant |
     | RFC 8693 | 2020 | Token Exchange |
+    | RFC 8705 | 2020 | Mutual-TLS client auth & certificate-bound tokens |
+    | RFC 8707 | 2020 | Resource Indicators |
     | RFC 9068 | 2021 | JWT Profile for OAuth 2.0 Access Tokens |
+    | RFC 9101 | 2021 | JAR — JWT-Secured Authorization Requests |
     | RFC 9126 | 2021 | Pushed Authorization Requests (PAR) |
+    | RFC 9207 | 2022 | `iss` Authorization Response Parameter |
     | RFC 9396 | 2023 | Rich Authorization Requests (RAR) |
     | RFC 9449 | 2023 | DPoP — Demonstrating Proof of Possession |
+    | RFC 9470 | 2023 | Step-Up Authentication Challenge |
     | RFC 9700 | 2025 | OAuth 2.0 Security Best Current Practice |
+    | RFC 9701 | 2025 | JWT Response for Token Introspection |
+    | RFC 9728 | 2025 | Protected Resource Metadata |
     | OAuth 2.1 (draft) | ongoing | Consolidated modern best practices |
     | OIDC Core 1.0 | 2014 | OpenID Connect identity layer |
     | OIDC Discovery 1.0 | 2014 | `.well-known/openid-configuration` schema |
@@ -110,7 +118,14 @@ paths:
         with a `code` (success) or an `error`.
 
         Under OAuth 2.1 only `response_type=code` is permitted (Implicit is
-        deprecated). PKCE (`code_challenge`) is mandatory.
+        deprecated). PKCE (`code_challenge`) is mandatory for public
+        clients — and for confidential clients too, save the narrow
+        OIDC-`nonce` exception of OAuth 2.1 §7.5.1.1.
+
+        When the request is delivered via PAR (`request_uri`, RFC 9126 §4)
+        or JAR (`request`, RFC 9101 §5), only `client_id` plus that one
+        parameter appear in the query string — everything else comes from
+        the pushed/signed request object.
       externalDocs:
         description: RFC 6749 §4.1.1, OIDC Core §3.1.2.1
         url: https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.1
@@ -210,6 +225,14 @@ paths:
 
         The deprecated `password` and `implicit` grants are intentionally
         omitted (per OAuth 2.1).
+
+        Client authentication: `client_secret_basic` (HTTP Basic) and mTLS
+        (RFC 8705) appear as security schemes; the form-body methods —
+        `client_secret_post` and the RFC 7523 `client_assertion` variants
+        (`private_key_jwt` / `client_secret_jwt`) — travel inside the
+        request body itself and are modeled by `ClientAuthFields`. Public
+        clients send no client credential (the empty security option) and
+        rely on PKCE.
       externalDocs:
         description: RFC 6749 §3.2
         url: https://datatracker.ietf.org/doc/html/rfc6749#section-3.2
@@ -241,10 +264,8 @@ paths:
           $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
-        - clientSecretPost: []
-        - clientAssertion: []
         - mtls: []
-        - none: []
+        - {}
 
   # =========================================================================
   # /revoke — RFC 7009
@@ -258,7 +279,8 @@ paths:
         Revokes an access or refresh token before its natural expiry. Per
         RFC 7009 §2.1, when a refresh token is revoked the AS SHOULD also
         invalidate all access tokens issued under the same authorization
-        grant. (Cascade is from refresh → access; not the other direction.)
+        grant; when an access token is revoked, the AS MAY also revoke the
+        underlying refresh token.
         A successful revocation always returns HTTP 200 with an empty body
         — even when the token is unknown to the server.
       externalDocs:
@@ -284,10 +306,8 @@ paths:
           $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
-        - clientSecretPost: []
-        - clientAssertion: []
         - mtls: []
-        - none: []
+        - {}
 
   # =========================================================================
   # /introspect — RFC 7662
@@ -323,21 +343,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IntrospectionResponse'
-            application/jwt:
+            application/token-introspection+jwt:
               schema:
                 $ref: '#/components/schemas/JWT'
                 description: |
-                  Signed/encrypted JWT containing the same claims, per the
-                  JWT Response for OAuth Token Introspection draft (used
-                  by FAPI 2.0).
+                  Signed (optionally encrypted) JWT introspection response per
+                  RFC 9701 — the body is a compact JWT (not JSON), requested via
+                  `Accept: application/token-introspection+jwt` with JOSE `typ`
+                  header `token-introspection+jwt`. Its decoded payload conforms
+                  to `JWTIntrospectionResponse` (the RFC 7662 members nested
+                  under the `token_introspection` claim).
         '400':
           $ref: '#/components/responses/OAuthError'
         '401':
           $ref: '#/components/responses/IntrospectionAuthError'
       security:
         - clientSecretBasic: []
-        - clientSecretPost: []
-        - clientAssertion: []
         - mtls: []
         - bearerAuth: []
 
@@ -392,10 +413,8 @@ paths:
           $ref: '#/components/responses/ClientAuthError'
       security:
         - clientSecretBasic: []
-        - clientSecretPost: []
-        - clientAssertion: []
         - mtls: []
-        - none: []
+        - {}
 
   # =========================================================================
   # /par — RFC 9126
@@ -453,10 +472,8 @@ paths:
           description: 'Too Many Requests (RFC 9126 §2.3) — rate limit exceeded.'
       security:
         - clientSecretBasic: []
-        - clientSecretPost: []
-        - clientAssertion: []
         - mtls: []
-        - none: []
+        - {}
 
   # =========================================================================
   # /userinfo — OIDC Core §5.3
@@ -485,7 +502,13 @@ paths:
                 $ref: '#/components/schemas/UserInfoResponse'
             application/jwt:
               schema:
-                $ref: '#/components/schemas/UserInfoSignedResponse'
+                $ref: '#/components/schemas/JWT'
+                description: |
+                  OIDC Core §5.3.2 — when the client registered a
+                  `userinfo_signed_response_alg`, the body is a signed
+                  (optionally encrypted) compact JWT, not JSON. Its decoded
+                  payload conforms to `UserInfoSignedResponse` (the standard
+                  claims plus mandatory `iss` and `aud`).
         '401':
           $ref: '#/components/responses/ProtectedResourceError'
         '403':
@@ -506,6 +529,20 @@ paths:
         url: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoRequest
       parameters:
         - $ref: '#/components/parameters/DPoPHeader'
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                access_token:
+                  type: string
+                  description: |
+                    Bearer token sent as a form-encoded body parameter per
+                    RFC 6750 §2.2. SHOULD NOT be used unless the
+                    Authorization header is unavailable to the client
+                    (OIDC Core §5.3.1).
       responses:
         '200':
           description: UserInfo claims
@@ -515,7 +552,13 @@ paths:
                 $ref: '#/components/schemas/UserInfoResponse'
             application/jwt:
               schema:
-                $ref: '#/components/schemas/UserInfoSignedResponse'
+                $ref: '#/components/schemas/JWT'
+                description: |
+                  OIDC Core §5.3.2 — when the client registered a
+                  `userinfo_signed_response_alg`, the body is a signed
+                  (optionally encrypted) compact JWT, not JSON. Its decoded
+                  payload conforms to `UserInfoSignedResponse` (the standard
+                  claims plus mandatory `iss` and `aud`).
         '401':
           $ref: '#/components/responses/ProtectedResourceError'
         '403':
@@ -604,6 +647,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/OAuthServerMetadata'
 
+  # =========================================================================
+  # Discovery — RFC 9728 (Protected Resource Metadata)
+  # =========================================================================
+  /.well-known/oauth-protected-resource:
+    get:
+      tags: [Discovery]
+      operationId: protectedResourceMetadata
+      summary: OAuth 2.0 protected-resource metadata (RFC 9728)
+      description: |
+        Metadata published by a protected resource (resource server): which
+        authorization servers it trusts, the scopes it understands, supported
+        bearer-token methods, and whether it requires DPoP-bound tokens. A
+        client or AS reads this to learn how to obtain and present tokens for
+        the resource. The resource advertises this document's URL via the
+        `resource_metadata` parameter of a `WWW-Authenticate` challenge
+        (RFC 9728 §5.1).
+      externalDocs:
+        description: RFC 9728 §3
+        url: https://datatracker.ietf.org/doc/html/rfc9728#section-3
+      responses:
+        '200':
+          description: Protected resource metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectedResourceMetadata'
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -616,7 +686,7 @@ components:
     ResponseType:
       name: response_type
       in: query
-      required: true
+      required: false
       description: |
         OAuth 2.1 §10.1 permits only `code` (the Authorization Code grant).
         OIDC Core §3.1.2.1 also defines `id_token` and `code id_token` for
@@ -624,6 +694,10 @@ components:
         `code token` and `code id_token token` are intentionally excluded
         per OAuth 2.1 / RFC 9700 §2.1.2 because front-channel access tokens
         are insecure (browser history leakage).
+
+        REQUIRED on a plain authorization request; omitted when the
+        parameters are carried by a PAR `request_uri` (RFC 9126 §4) or a
+        JAR `request` object (RFC 9101 §5).
       schema:
         type: string
         enum:
@@ -686,12 +760,17 @@ components:
     CodeChallenge:
       name: code_challenge
       in: query
-      required: true
+      required: false
       description: |
         PKCE challenge — `BASE64URL(SHA256(code_verifier))` for the `S256`
         method. 43-128 characters from the unreserved set
-        `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
-        **Mandatory in OAuth 2.1 for all clients.** RFC 7636 §4.2.
+        `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`. RFC 7636 §4.2.
+        Per OAuth 2.1 §4.1.1 / §7.5.1.1 the AS MUST reject requests
+        without it from public clients, and from confidential clients
+        unless there is reasonable assurance the client properly uses the
+        OIDC `nonce` mechanism (even then PKCE remains RECOMMENDED).
+        Omitted when the parameters travel via a PAR `request_uri` or JAR
+        `request` object.
       schema:
         type: string
         minLength: 43
@@ -701,15 +780,19 @@ components:
     CodeChallengeMethod:
       name: code_challenge_method
       in: query
-      required: true
+      required: false
       description: |
-        Always `S256` per OAuth 2.1 §4.1.1 and RFC 9700 §4.8. The legacy
-        `plain` method (RFC 7636 §4.4) is intentionally omitted; clients
-        and servers compliant with OAuth 2.1 MUST use S256 only.
+        Profiled to `S256` only in this spec. In OAuth 2.1 §4.1.1 the
+        parameter is OPTIONAL (defaulting to `plain`), and `plain` is
+        permitted only when the client cannot compute S256 — a client
+        capable of S256 MUST use it, since S256 is mandatory to implement
+        on the server. RFC 9700 §2.1.1 has clients SHOULD use a method
+        that does not expose the verifier in the authorization request —
+        today only `S256` qualifies. (RFC 9700 §4.8 describes the
+        downgrade attack that `plain` invites.)
       schema:
         type: string
         enum: [S256]
-        default: S256
 
     Nonce:
       name: nonce
@@ -778,6 +861,8 @@ components:
       description: |
         Reference to a request previously submitted via PAR (RFC 9126 §4).
         When present, takes precedence over individual query parameters.
+        Note: RFC 9101 §5 also allows client-hosted Request Object URIs;
+        this spec deliberately models only the PAR-issued form.
       schema:
         type: string
         format: uri
@@ -925,11 +1010,19 @@ components:
         The DPoP `algs` parameter lists the JWS algorithms the resource
         accepts for DPoP proofs (RFC 9449 §5). The standalone Bearer format
         (RFC 6750 §3) is the same header without the trailing `DPoP` scheme.
+
+        Additional auth-params may appear on the challenge:
+          - `resource_metadata` — URL of the resource's metadata document
+            (RFC 9728 §5.1).
+          - `acr_values` / `max_age` — step-up requirement, signalled with
+            `error="insufficient_user_authentication"` (RFC 9470 §3).
       schema:
         type: string
         examples:
           - 'Bearer, DPoP algs="ES256 PS256"'
           - 'Bearer error="invalid_token", error_description="The access token expired", DPoP algs="ES256 EdDSA"'
+          - 'Bearer error="invalid_token", resource_metadata="https://rs.example/.well-known/oauth-protected-resource"'
+          - 'Bearer error="insufficient_user_authentication", acr_values="urn:mace:incommon:iap:silver", max_age="0"'
     WWWAuthenticateBasic:
       description: |
         HTTP Basic challenge returned on a 401 from a client-authenticated
@@ -1085,8 +1178,10 @@ components:
         client_id:
           type: string
           description: |
-            REQUIRED for public clients (no client secret) and clients that
-            authenticate via `client_assertion`. RFC 6749 §3.2.1.
+            REQUIRED for unauthenticated (public) clients per RFC 6749
+            §3.2.1. OPTIONAL when authenticating via `client_assertion` —
+            the assertion's subject already identifies the client; if sent
+            anyway it MUST identify the same client (RFC 7521 §4.2).
         client_secret:
           type: string
           description: |
@@ -1112,9 +1207,12 @@ components:
           type: array
           description: |
             Indicator(s) of the protected resource(s) for which the access
-            token is requested. Each value MUST be an absolute URI without a
-            fragment component. The parameter MAY be included multiple times
-            in the underlying form-encoded body. RFC 8707.
+            token is requested. Each value MUST be an absolute URI without
+            a fragment component, and SHOULD NOT include a query component.
+            The parameter MAY be included multiple times in the underlying
+            form-encoded body. RFC 8707 §2. Some vendors use a non-standard
+            `audience` parameter for the same purpose (e.g. Auth0); this
+            spec models only the standard `resource`.
           items:
             type: string
             format: uri
@@ -1182,12 +1280,6 @@ components:
             scope:
               type: string
               description: Space-delimited list of requested scopes.
-            audience:
-              type: string
-              description: |
-                NON-STANDARD — vendor extension (e.g. Auth0 uses `audience`
-                instead of RFC 8707 `resource`). Prefer `resource`. Kept here
-                for compatibility with vendor servers.
 
     RefreshTokenRequest:
       description: |
@@ -1415,6 +1507,8 @@ components:
             # RFC 9449 (DPoP §10)
             - invalid_dpop_proof
             - use_dpop_nonce
+            # RFC 9470 (Step-Up Authentication §3)
+            - insufficient_user_authentication
             # OIDC Core §3.1.2.6 — authorization-endpoint-only
             - interaction_required
             - login_required
@@ -1442,15 +1536,15 @@ components:
     # Device flow — RFC 8628
     # -----------------------------------------------------------------
     DeviceAuthorizationRequest:
-      description: RFC 8628 §3.1.
+      description: |
+        RFC 8628 §3.1. `client_id` (from `ClientAuthFields`) is REQUIRED
+        only when the client is not authenticating by other means (e.g.
+        HTTP Basic), per §3.1.
       allOf:
         - $ref: '#/components/schemas/ClientAuthFields'
         - $ref: '#/components/schemas/ResourceIndicators'
         - type: object
-          required: [client_id]
           properties:
-            client_id:
-              type: string
             scope:
               type: string
               description: Space-delimited list of requested scopes.
@@ -1564,18 +1658,20 @@ components:
           format: uri
           description: |
             Reference URI to be passed to `/authorize` in the `request_uri`
-            query parameter. MUST start with the URN prefix
-            `urn:ietf:params:oauth:request_uri:` per RFC 9126 §2.2.
-          pattern: '^urn:ietf:params:oauth:request_uri:.+$'
+            query parameter. Per RFC 9126 §2.2 the format is at the AS's
+            discretion — it MUST contain a part generated with a
+            cryptographically strong pseudorandom algorithm, and the AS
+            MAY use the IANA-registered form
+            `urn:ietf:params:oauth:request_uri:<reference-value>`.
           examples:
             - 'urn:ietf:params:oauth:request_uri:6esc_11ACC5bwc014ltc14eY22c'
         expires_in:
           type: integer
-          minimum: 5
-          maximum: 600
+          minimum: 1
           description: |
-            Lifetime in seconds of the `request_uri`. Typical range is
-            5-600 seconds per RFC 9126 §2.2 guidance.
+            Lifetime in seconds of the `request_uri`, expressed as a
+            positive integer. At the discretion of the AS but typically
+            short — e.g. between 5 and 600 seconds (RFC 9126 §2.2).
           examples: [60]
 
     # -----------------------------------------------------------------
@@ -1643,6 +1739,12 @@ components:
           $ref: '#/components/schemas/StringOrURI'
         jti:
           type: string
+        acr:
+          type: string
+          description: 'Authentication Context Class Reference (RFC 9470 §6.2).'
+        auth_time:
+          $ref: '#/components/schemas/NumericDate'
+          description: 'End-user authentication time (RFC 9470 §6.2).'
         cnf:
           $ref: '#/components/schemas/Confirmation'
           description: |
@@ -1654,6 +1756,37 @@ components:
           description: 'RAR (RFC 9396 §9): granted authorization details for this token.'
           items:
             $ref: '#/components/schemas/AuthorizationDetail'
+
+    # -----------------------------------------------------------------
+    # JWT introspection response — RFC 9701
+    # -----------------------------------------------------------------
+    JWTIntrospectionResponse:
+      description: |
+        Decoded payload of a JWT introspection response (RFC 9701 §5). Wire
+        form is a signed (optionally encrypted) JWT with media type and `typ`
+        header `token-introspection+jwt`, returned by `/introspect` when the
+        caller requests it via `Accept`. The RFC 7662 members are nested under
+        the `token_introspection` claim (NOT flattened to top level).
+      type: object
+      required: [iss, aud, iat, token_introspection]
+      additionalProperties: true
+      properties:
+        iss:
+          $ref: '#/components/schemas/StringOrURI'
+          description: REQUIRED. Issuer (the authorization server).
+        aud:
+          description: REQUIRED. Audience — the protected resource that introspected.
+          oneOf:
+            - $ref: '#/components/schemas/StringOrURI'
+            - type: array
+              items:
+                $ref: '#/components/schemas/StringOrURI'
+        iat:
+          $ref: '#/components/schemas/NumericDate'
+          description: REQUIRED. Issued-at time.
+        token_introspection:
+          $ref: '#/components/schemas/IntrospectionResponse'
+          description: 'REQUIRED. RFC 7662 members wrapped as one claim (RFC 9701 §5).'
 
     # -----------------------------------------------------------------
     # Revocation — RFC 7009
@@ -1888,7 +2021,9 @@ components:
           items: { type: string }
           description: |
             REQUIRED. For OIDC dynamic providers, MUST include `code`,
-            `id_token`, and `token id_token` per OIDC Core §3.
+            `id_token`, and `id_token token` per OIDC Discovery 1.0 §3.
+            (This spec's OAuth 2.1 profile deliberately omits the
+            token-bearing response types — see `ResponseType`.)
         response_modes_supported:
           type: array
           items:
@@ -1929,6 +2064,17 @@ components:
           type: array
           items: { type: string }
         introspection_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+
+        # ---- JWT introspection response (RFC 9701 §7) ----
+        introspection_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        introspection_encryption_alg_values_supported:
+          type: array
+          items: { type: string }
+        introspection_encryption_enc_values_supported:
           type: array
           items: { type: string }
 
@@ -2021,6 +2167,10 @@ components:
           type: boolean
           description: 'PAR (RFC 9126): if true, `/authorize` MUST be reached via `request_uri` from PAR.'
           default: false
+        require_signed_request_object:
+          type: boolean
+          description: 'AS requires signed Request Objects via request/request_uri (RFC 9101 §9.2, §10.5).'
+          default: false
 
         # ---- PKCE (RFC 7636 + RFC 8414) ----
         code_challenge_methods_supported:
@@ -2029,8 +2179,10 @@ components:
             type: string
             enum: [S256]
           description: |
-            PKCE methods supported. Under OAuth 2.1 / RFC 9700 §4.8 the
-            value MUST be `["S256"]`; the legacy `plain` method is omitted.
+            PKCE methods supported. Profiled to `["S256"]` here: S256 is
+            mandatory to implement on the AS (OAuth 2.1 §4.1.1), and per
+            RFC 9700 §2.1.1 clients SHOULD use a method that does not
+            expose the verifier — so the legacy `plain` method is omitted.
 
         # ---- DPoP (RFC 9449) ----
         dpop_signing_alg_values_supported:
@@ -2057,6 +2209,12 @@ components:
             Whether the AS includes an `iss` parameter in authorization
             responses for mix-up attack prevention. RFC 9207.
           default: false
+
+        # ---- Protected Resource Metadata (RFC 9728 §4) ----
+        protected_resources:
+          type: array
+          items: { type: string, format: uri }
+          description: Resource identifiers whose metadata this AS oversees (RFC 9728 §4).
 
         # ---- OIDC Logout 1.0 ----
         frontchannel_logout_supported:
@@ -2107,6 +2265,77 @@ components:
             JWT containing all of the above metadata, signed by the AS.
             When present, takes precedence over individual fields per
             RFC 8414 §3.1.
+
+    # -----------------------------------------------------------------
+    # Protected Resource Metadata — RFC 9728
+    # -----------------------------------------------------------------
+    ProtectedResourceMetadata:
+      description: |
+        Protected-resource (resource server) metadata per RFC 9728 §2, served
+        at `/.well-known/oauth-protected-resource`. Open to extension members
+        (§3.2); a signed form MAY be supplied via `signed_metadata`.
+      type: object
+      required: [resource]
+      additionalProperties: true
+      properties:
+        resource:
+          $ref: '#/components/schemas/StringOrURI'
+          description: |
+            REQUIRED. Resource identifier — an https URL with no fragment
+            (RFC 9728 §2); MUST match the `aud`/`resource` value clients use.
+        authorization_servers:
+          type: array
+          items: { type: string, format: uri }
+          description: Issuer identifiers of ASes that can issue tokens for this resource.
+        jwks_uri:
+          type: string
+          format: uri
+        scopes_supported:
+          type: array
+          items: { type: string }
+        bearer_methods_supported:
+          type: array
+          items: { type: string, enum: [header, body, query] }
+          description: |
+            How a bearer token may be presented (RFC 6750 §2). `query` is
+            listed because RFC 9728 §2 registers it, but clients MUST NOT
+            send tokens in a URI query parameter and resource servers MUST
+            ignore tokens presented that way (RFC 9700 §4.3.2,
+            OAuth 2.1 §5.1).
+        resource_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+          description: JWS algs for signed resource responses; `none` MUST NOT be used.
+        resource_name:
+          type: string
+        resource_documentation:
+          type: string
+          format: uri
+        resource_policy_uri:
+          type: string
+          format: uri
+        resource_tos_uri:
+          type: string
+          format: uri
+        tls_client_certificate_bound_access_tokens:
+          type: boolean
+          default: false
+        authorization_details_types_supported:
+          type: array
+          items: { type: string }
+        dpop_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        dpop_bound_access_tokens_required:
+          type: boolean
+          default: false
+          description: Whether the resource requires DPoP-bound access tokens (RFC 9449).
+        signed_metadata:
+          type: string
+          description: |
+            JWT (JWS compact) asserting these metadata values as claims, with
+            a REQUIRED `iss`; takes precedence over the plain-JSON members
+            (RFC 9728 §2.2).
 
     # -----------------------------------------------------------------
     # UserInfo — OIDC Core §5
@@ -2179,11 +2408,12 @@ components:
 
     UserInfoSignedResponse:
       description: |
-        UserInfo claims wrapped in a JWT (signed and/or encrypted) per
-        OIDC Core §5.3.2. When the `Accept` is `application/jwt`, the
-        response body is a compact-serialized JWT whose payload includes
-        `iss` (REQUIRED — the OP) and `aud` (REQUIRED — the requesting
-        client) in addition to the standard claims.
+        Decoded payload of a signed UserInfo response per OIDC Core
+        §5.3.2. On the wire the `application/jwt` body is a compact JWT
+        string (see the `JWT` schema); this documentation-only schema
+        describes that JWT's payload, which adds `iss` (REQUIRED — the OP)
+        and `aud` (REQUIRED — the requesting client) to the standard
+        claims.
       allOf:
         - type: object
           required: [iss, aud, sub]
@@ -2434,33 +2664,14 @@ components:
       scheme: basic
       description: |
         Client authentication via HTTP Basic with `client_id:client_secret`
-        per RFC 6749 §2.3.1. PREFERRED over `clientSecretPost` per the same
-        section.
-
-    clientSecretPost:
-      type: apiKey
-      in: header
-      name: X-OAuth-Client-Secret-Post
-      description: |
-        Client authentication via `client_id` + `client_secret` form fields
-        in the request body (RFC 6749 §2.3.1). NOT RECOMMENDED — prefer
-        `clientSecretBasic`. This scheme is a documentation marker only;
-        OpenAPI lacks a body-credentials security type. In practice the
-        fields appear in `ClientAuthFields` and the operation's request body.
-
-    clientAssertion:
-      type: apiKey
-      in: header
-      name: X-OAuth-Client-Assertion
-      description: |
-        Client authentication via JWT bearer assertion — form fields
-        `client_assertion_type` (the URN
-        `urn:ietf:params:oauth:client-assertion-type:jwt-bearer`) and
-        `client_assertion` (a JWT) per RFC 7523 §2.2. Used for
-        `client_secret_jwt` and `private_key_jwt`. This scheme is a
-        documentation marker only; the actual fields live in
-        `ClientAuthFields` (which is mixed into every token-endpoint-style
-        request schema).
+        per RFC 6749 §2.3.1, PREFERRED over the form-body
+        `client_secret_post` variant by the same section. The form-body
+        methods (`client_secret_post`, `private_key_jwt`,
+        `client_secret_jwt`) are deliberately not separate security
+        schemes — OpenAPI cannot model body credentials — they are modeled
+        by `ClientAuthFields` inside each token-endpoint request schema,
+        with the empty security option (`{}`) covering them and public
+        clients.
 
     mtls:
       type: mutualTLS
@@ -2469,30 +2680,25 @@ components:
         (`tls_client_auth`) or self-signed (`self_signed_tls_client_auth`)
         as advertised in `token_endpoint_auth_methods_supported`.
 
-    none:
-      type: apiKey
-      in: header
-      name: X-No-Authentication
-      description: |
-        Public client — no client authentication. Permitted for native and
-        SPA clients under OAuth 2.1, provided PKCE is used.
-
     oauth2:
       type: oauth2
       description: |
-        OAuth 2.0 / OIDC flows. Use this scheme on protected resources to
-        declare which scopes a caller must hold.
+        OAuth 2.0 / OIDC flows. Referenced by no operation by design: this
+        spec describes the AS itself, whose endpoints are not
+        OAuth-protected. Copy this scheme into resource-server specs to
+        declare which scopes a caller must hold. The URLs are relative so
+        they resolve against the templated `{issuer}` server.
       flows:
         authorizationCode:
-          authorizationUrl: 'https://as.example.com/authorize'
-          tokenUrl: 'https://as.example.com/token'
-          refreshUrl: 'https://as.example.com/token'
+          authorizationUrl: /authorize
+          tokenUrl: /token
+          refreshUrl: /token
           scopes:
             openid: OIDC — issue an ID token
             profile: OIDC — basic profile claims
             email: OIDC — e-mail and verification
             offline_access: Issue a refresh token
         clientCredentials:
-          tokenUrl: 'https://as.example.com/token'
-          refreshUrl: 'https://as.example.com/token'
+          tokenUrl: /token
+          refreshUrl: /token
           scopes: {}

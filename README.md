@@ -14,7 +14,7 @@ The arc is three steps:
 
 1. **Read the RFCs.** Canonical source text is vendored under
    `references/rfc-sources/` so each part of the spec can be cross-checked
-   against authoritative material. `references/RFC_AUDIT_SYNTHESIS.md` walks
+   against authoritative material. `references/audit/rfc-audit-synthesis.md` walks
    through the audit that reconciled the spec against 20 RFCs and related
    specs.
 2. **Encode the protocol.** Every endpoint, parameter, grant type, and error
@@ -40,8 +40,8 @@ working group never produced one. The two community attempts that exist are both
 - ybelenko's `oauth2_as_oas3_components` (OpenAPI 3.0.2, no commits since 2021)
 
 Both are kept here under `references/` for comparison. See
-[`references/NOTES.md`](references/NOTES.md) for what each covers and what each
-misses.
+[`references/audit/community-reference-specs.md`](references/audit/community-reference-specs.md)
+for what each covers and what each misses.
 
 This project is a fresh OpenAPI 3.1 spec that:
 
@@ -72,6 +72,7 @@ This project is a fresh OpenAPI 3.1 spec that:
 | `GET /jwks` | RFC 7517 | Public signing keys |
 | `GET /.well-known/openid-configuration` | OIDC Discovery 1.0 | OIDC provider metadata |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 | OAuth-only provider metadata |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728 | Protected-resource metadata |
 
 ### Grant types modeled
 
@@ -99,15 +100,20 @@ The deprecated `password` and `implicit` grants are intentionally excluded.
 | RFC 7636 | 2015 | PKCE — Proof Key for Code Exchange |
 | RFC 7662 | 2015 | Token Introspection |
 | RFC 8414 | 2018 | Authorization Server Metadata |
-| RFC 8705 | 2018 | Mutual-TLS client auth & certificate-bound tokens |
 | RFC 8628 | 2019 | Device Authorization Grant |
 | RFC 8693 | 2020 | Token Exchange |
+| RFC 8705 | 2020 | Mutual-TLS client auth & certificate-bound tokens |
 | RFC 8707 | 2020 | Resource Indicators |
 | RFC 9068 | 2021 | JWT Profile for OAuth 2.0 Access Tokens |
+| RFC 9101 | 2021 | JAR — JWT-Secured Authorization Requests |
 | RFC 9126 | 2021 | Pushed Authorization Requests (PAR) |
+| RFC 9207 | 2022 | `iss` Authorization Response Parameter |
 | RFC 9396 | 2023 | Rich Authorization Requests (RAR) |
 | RFC 9449 | 2023 | DPoP — Demonstrating Proof of Possession |
+| RFC 9470 | 2023 | Step-Up Authentication Challenge |
 | RFC 9700 | 2025 | OAuth 2.0 Security Best Current Practice |
+| RFC 9701 | 2025 | JWT Response for Token Introspection |
+| RFC 9728 | 2025 | Protected Resource Metadata |
 | OAuth 2.1 (draft) | ongoing | Consolidated modern best practices |
 | OIDC Core 1.0 | 2014 | OpenID Connect identity layer |
 | OIDC Discovery 1.0 | 2014 | `.well-known/openid-configuration` schema |
@@ -254,10 +260,12 @@ oauth-openapi/
 │   ├── README.md                          runbook for the scripts in this folder
 │   └── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
 └── references/
-    ├── NOTES.md                           description of the two community reference specs
-    ├── REAL_WORLD_COMPARISON.md           how the spec compares to live issuers (Google, Microsoft, etc.)
-    ├── RFC_AUDIT_SYNTHESIS.md             audit of the spec against 20 RFCs and related specs
+    ├── audit/                             spec-vs-standard audit evidence
+    │   ├── rfc-audit-synthesis.md         audit of the spec against 20 RFCs and related specs
+    │   ├── live-idp-comparison.md         how the spec compares to live issuers (Google, Microsoft)
+    │   └── community-reference-specs.md   survey of the two community reference specs
     ├── rfc-sources/                       vendored canonical RFC text snapshots — primary study material
+    ├── oidf-sources/                      vendored OpenID Foundation specs (OIDC, JARM, response modes)
     ├── rfc-validation/                    per-RFC validation evidence backing the audit
     ├── ibm-api-connect-oauth.yaml         IBM's archived spec (Swagger 2.0, 2021)
     └── ybelenko-oauth2-endpoints.yaml     ybelenko's community spec (OpenAPI 3.0.2, 2021)
