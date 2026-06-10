@@ -1,12 +1,18 @@
-# Real-world `DiscoveryDocument` validation
+# Real-world discovery-metadata validation
 
-**Analysis date:** 2026-05-10
-**Spec under test:** `oauth-openapi.yaml` v1.0.0, `components.schemas.DiscoveryDocument`
+**Analysis date:** 2026-05-10 (refreshed 2026-06-07)
+**Spec under test:** `oauth-openapi.yaml`, `components.schemas.OAuthServerMetadata`
+(surfaced on both discovery endpoints via `OpenIDProviderMetadata`).
 
-This document compares our `DiscoveryDocument` schema against the **live**
-`.well-known/openid-configuration` responses of three real authorization
-servers, to verify that the schema is neither under-specified (missing
-standard fields) nor over-specified (modeling fields nobody publishes).
+> **2026-06-07 note:** at audit time this schema was named `DiscoveryDocument`;
+> it was later split into `OAuthServerMetadata` (the RFC 8414 base) +
+> `OpenIDProviderMetadata` (the OIDC wrapper). Field names below are unchanged.
+
+This document compares our authorization-server metadata schema against the
+**live** `.well-known/openid-configuration` responses of three real
+authorization servers, to verify that the schema is neither under-specified
+(missing standard fields) nor over-specified (modeling fields nobody
+publishes).
 
 ## Sources fetched
 
@@ -17,6 +23,8 @@ standard fields) nor over-specified (modeling fields nobody publishes).
 | Auth0 (sample tenant) | `https://samples.auth0.com/.well-known/openid-configuration` | 29 |
 
 Our spec defined **23 fields**. After this comparison we'll bring it to **38**.
+(As of 2026-06-07, after further RFC additions, `OAuthServerMetadata` carries
+**67 fields**.)
 
 ## Universal core — published by all 3 + present in spec
 
@@ -36,7 +44,7 @@ userinfo_endpoint
 ## Standard fields published by ≥1 IdP but **missing** from the spec
 
 These are real OIDC / RFC spec fields that we under-modeled. They will be
-**added** to `DiscoveryDocument`:
+**added** to the schema (now `OAuthServerMetadata`):
 
 | Field | Spec source | Published by |
 |---|---|---|
@@ -125,7 +133,7 @@ curl -sf https://samples.auth0.com/.well-known/openid-configuration > /tmp/a.jso
 python3 - <<'PY'
 import json, yaml
 spec = yaml.safe_load(open('oauth-openapi.yaml'))
-my = set(spec['components']['schemas']['DiscoveryDocument']['properties'])
+my = set(spec['components']['schemas']['OAuthServerMetadata']['properties'])
 g = set(json.load(open('/tmp/g.json')))
 m = set(json.load(open('/tmp/m.json')))
 a = set(json.load(open('/tmp/a.json')))

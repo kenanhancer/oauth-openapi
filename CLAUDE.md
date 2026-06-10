@@ -14,7 +14,7 @@ of every grant type, endpoint, and modern extension through 2025.
 The spec is the teaching aid, not the end goal. The intended workflow is:
 read the relevant RFC (text vendored under `references/rfc-sources/`) → encode
 the shape in YAML with `externalDocs` pointing back to the clause → cross-check
-against `references/RFC_AUDIT_SYNTHESIS.md` → run `openapi-generator` to
+against `references/audit/rfc-audit-synthesis.md` → run `openapi-generator` to
 scaffold a server in Python (FastAPI), Node.js (Express), C# (ASP.NET Core),
 Java (Spring Boot), Go, etc., and see the protocol made concrete. Everything
 else (`tools/`, `references/`, slash commands) exists to support that loop.
@@ -63,11 +63,17 @@ signal that the schema is dead code.
   - `ibm-api-connect-oauth.yaml`, `ybelenko-oauth2-endpoints.yaml` — historical
     community specs. **Read-only**; never overwrite or "fix" them — they
     document the past, not the present.
-  - `rfc-sources/` — vendored canonical RFC/draft text. **Refreshable**: re-pull
-    when a draft revises (see `rfc-sources/README.md` for the procedure).
-    Published RFC bytes never change; the OAuth 2.1 draft does.
-  - `rfc-validation/`, `RFC_AUDIT_SYNTHESIS.md`, `NOTES.md`,
-    `REAL_WORLD_COMPARISON.md` — audit evidence; update when re-auditing.
+  - `rfc-sources/` — vendored canonical IETF RFC/draft text (every OAuth WG RFC
+    plus the OAuth 2.1 draft). **Refreshable**: re-pull when a draft revises (see
+    `rfc-sources/README.md`). Published RFC bytes never change; the OAuth 2.1
+    draft does.
+  - `oidf-sources/` — vendored OpenID Foundation specs (OpenID Connect Core /
+    Discovery, the OAuth response-mode specs, and JARM). These are **not** RFCs
+    (HTML published by the OpenID Foundation) and can be revised in place, so
+    re-pull when auditing against a newer revision (see `oidf-sources/README.md`).
+  - `rfc-validation/` and `audit/` (`rfc-audit-synthesis.md`,
+    `live-idp-comparison.md`, `community-reference-specs.md`) — audit evidence;
+    update when re-auditing.
 - `.claude/` — Claude Code project config (permissions + slash commands).
   Do not add user-specific overrides; those go in `.claude/settings.local.json`.
 

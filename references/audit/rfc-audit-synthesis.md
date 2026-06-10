@@ -1,6 +1,6 @@
 # RFC audit synthesis
 
-**Audit date:** 2026-05-10
+**Audit date:** 2026-05-10 · **Last updated:** 2026-06-07 (see the Update log at the end)
 **Method:** 20 parallel agents, one per spec, comparing the spec against each
 RFC/normative text.
 **Disclosure:** WebFetch/curl was denied in the agents' sandbox for most runs;
@@ -8,7 +8,9 @@ agents worked from training-data knowledge of these stable specs (same source
 the original spec used). The value of the audit is the *narrow per-RFC focus*
 that the original drafting did not have, not "live RFC reading."
 
-Per-RFC reports live alongside this document under `rfc-validation/`.
+Per-RFC reports live under [`../rfc-validation/`](../rfc-validation/). The
+discovery schema referred to below as `DiscoveryDocument` is implemented as
+`OAuthServerMetadata` (+ `OpenIDProviderMetadata` via `allOf`).
 
 ## Tally by spec
 
@@ -70,7 +72,7 @@ Currently has: invalid_request, invalid_client, invalid_grant, unauthorized_clie
   - `registration_not_supported`
   - (plus invalid_request_uri / invalid_request_object — already listed above)
 
-## DiscoveryDocument — add fields
+## DiscoveryDocument (now `OAuthServerMetadata`) — add fields
 
 Currently has 23 fields. Add the following (organized by spec):
 
@@ -286,7 +288,29 @@ Skipped intentionally (vendor-specific or out of scope):
 The spec moves from ~23 DiscoveryDocument fields → ~50; ErrorResponse error
 enum expands by ~13 codes; ~6 new request schemas modify; security schemes
 are corrected; ~7 new reusable schemas added; ~5 reusable headers added.
+(The schema is now `OAuthServerMetadata`, 67 fields as of 2026-06-07.)
 
 After all changes the spec should pass Spectral lint cleanly and represent
 the OAuth 2.1 + OIDC + modern extensions surface area faithfully enough to
 generate working clients against any RFC-compliant authorization server.
+
+## Update log — 2026-06-07
+
+Four newly vendored OAuth WG RFCs were incorporated into `oauth-openapi.yaml`
+after a 17-RFC gap analysis (the full vendored set is listed in
+[`../rfc-sources/README.md`](../rfc-sources/README.md)). Lint stays at
+0 errors / 0 warnings.
+
+| RFC | Added to the spec |
+|---|---|
+| **RFC 9728** Protected Resource Metadata | new `/.well-known/oauth-protected-resource` endpoint + `ProtectedResourceMetadata` schema; `protected_resources` AS-metadata field; `resource_metadata` `WWW-Authenticate` param |
+| **RFC 9470** Step-Up Authentication | `insufficient_user_authentication` error code; `acr` + `auth_time` on `IntrospectionResponse`; `acr_values`/`max_age` challenge params |
+| **RFC 9701** JWT Introspection Response | `/introspect` media type `application/token-introspection+jwt` + `JWTIntrospectionResponse` doc schema; 3× `introspection_*_values_supported` discovery fields |
+| **RFC 9101** JAR | `require_signed_request_object` AS-metadata field |
+
+**Schema naming:** the single `DiscoveryDocument` schema referenced throughout
+this audit was split into `OAuthServerMetadata` (RFC 8414 base, 67 fields) and
+`OpenIDProviderMetadata` (the OIDC wrapper — `allOf` + OIDC-required fields).
+Decoded-payload schemas (`IDTokenClaims`, `JWTAccessTokenClaims`,
+`JWTIntrospectionResponse`) are intentionally unwired documentation schemas, so
+`oas3-unused-component` lint hints for them are expected.

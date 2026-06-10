@@ -1,7 +1,7 @@
 # Reference Specifications
 
 This folder holds two community/vendor OpenAPI specs for OAuth 2.0 that we used as
-reference while building `../oauth-openapi.yaml`. **They are kept here for historical
+reference while building `../../oauth-openapi.yaml`. **They are kept here for historical
 comparison only — neither is current and neither should be used as-is.**
 
 ## ibm-api-connect-oauth.yaml
@@ -44,7 +44,7 @@ comparison only — neither is current and neither should be used as-is.**
 
 ## Why we wrote our own
 
-The fresh spec at `../oauth-openapi.yaml` covers the modern surface that these two
+The fresh spec at `../../oauth-openapi.yaml` covers the modern surface that these two
 omit, follows OAuth 2.1 defaults, and adds OpenID Connect on top. It is also
 vendor-agnostic — no IBM or other vendor extensions — so it can be retargeted at any
 issuer by changing the server URL.
