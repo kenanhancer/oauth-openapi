@@ -1,0 +1,46 @@
+DeviceAuthorizationRequest:
+  description: |
+    RFC 8628 §3.1. `client_id` (from `ClientAuthFields`) is REQUIRED
+    only when the client is not authenticating by other means (e.g.
+    HTTP Basic), per §3.1.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - type: object
+    properties:
+      scope:
+        type: string
+        description: Space-delimited list of requested scopes.
+DeviceAuthorizationResponse:
+  description: RFC 8628 §3.2
+  type: object
+  required:
+  - device_code
+  - user_code
+  - verification_uri
+  - expires_in
+  properties:
+    device_code:
+      type: string
+      description: Long opaque device verification code (kept secret by the client).
+    user_code:
+      type: string
+      description: Short, human-typeable code shown to the user.
+      examples:
+      - WDJB-MJHT
+      - 26FB-FA97
+    verification_uri:
+      type: string
+      format: uri
+      description: End-user verification URI on the authorization server.
+    verification_uri_complete:
+      type: string
+      format: uri
+      description: 'Optional: URI with `user_code` already embedded (for QR codes).'
+    expires_in:
+      type: integer
+      description: Lifetime in seconds of `device_code` and `user_code`.
+    interval:
+      type: integer
+      description: Minimum polling interval in seconds (default 5).
+      default: 5

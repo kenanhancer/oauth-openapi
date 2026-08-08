@@ -1,0 +1,55 @@
+post:
+  tags:
+  - PAR
+  operationId: pushedAuthorizationRequest
+  summary: Pushed Authorization Request (RFC 9126)
+  description: |
+    Pushes the authorization request parameters to the server before the
+    user-agent redirect. The server returns a short-lived `request_uri`
+    that the client then passes (instead of the full request) to
+    `/authorize`. This avoids leaking parameters via browser history,
+    keeps URLs short, and enables integrity protection.
+
+    Per §2.1, the request body MUST NOT contain a `request_uri` parameter.
+    Per §4, when `/authorize` is reached via a PAR-issued `request_uri`,
+    only `client_id` and `request_uri` are sent — all other parameters
+    come from the pushed body.
+  externalDocs:
+    description: RFC 9126 §2
+    url: https://datatracker.ietf.org/doc/html/rfc9126#section-2
+  parameters:
+  - $ref: ../components/parameters.yaml#/DPoPHeader
+  requestBody:
+    required: true
+    content:
+      application/x-www-form-urlencoded:
+        schema:
+          $ref: ../components/schemas/par.yaml#/PARRequest
+  responses:
+    '201':
+      description: Pushed authorization request accepted.
+      headers:
+        Cache-Control:
+          $ref: ../components/headers.yaml#/CacheControlNoStore
+        Pragma:
+          $ref: ../components/headers.yaml#/PragmaNoCache
+        DPoP-Nonce:
+          $ref: ../components/headers.yaml#/DPoPNonce
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/par.yaml#/PARResponse
+    '400':
+      $ref: ../components/responses.yaml#/OAuthErrorWithDPoPNonce
+    '401':
+      $ref: ../components/responses.yaml#/ClientAuthError
+    '405':
+      description: Method Not Allowed (RFC 9126 §2.3) — only POST is permitted.
+    '413':
+      description: Payload Too Large (RFC 9126 §2.3) — request exceeds AS-defined limit.
+    '429':
+      description: Too Many Requests (RFC 9126 §2.3) — rate limit exceeded.
+  security:
+  - clientSecretBasic: []
+  - mtls: []
+  - {}

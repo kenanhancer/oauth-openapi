@@ -1,0 +1,127 @@
+TokenResponse:
+  description: |
+    Successful token response — RFC 6749 §5.1, with extensions:
+    OIDC Core §3.1.3.3 adds `id_token`; RFC 8693 §2.2.1 adds
+    `issued_token_type` (REQUIRED for token-exchange responses); RFC
+    9396 §6 adds `authorization_details`. Returned with
+    `Cache-Control: no-store` and `Pragma: no-cache` headers.
+  type: object
+  required:
+  - access_token
+  - token_type
+  additionalProperties: true
+  properties:
+    access_token:
+      type: string
+      description: |
+        The access token issued. Format is implementation-defined: an
+        opaque string (validated via introspection) or a JWT (RFC 9068
+        — see `JWTAccessTokenClaims` for the decoded shape).
+      examples:
+      - SlAV32hkKG
+      - eyJhbGciOiJSUzI1NiIsInR5cCI6ImF0K2p3dCJ9.eyJpc3MiOiJodHRwczovL2FzLmV4YW1wbGUuY29tIiwiZXhwIjoxNzM1NjkzMjAwLCJhdWQiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbSIsInN1YiI6InVzZXItMTIzIiwiY2xpZW50X2lkIjoiYWJjMTIzIn0.signature
+    token_type:
+      type: string
+      description: |
+        Token presentation scheme. `Bearer` (RFC 6750) for unbound
+        tokens, `DPoP` (RFC 9449) for sender-constrained tokens, or
+        `N_A` for token-exchange responses where no usable access token
+        is returned (RFC 8693 §2.2.1).
+      examples:
+      - Bearer
+      - DPoP
+      - N_A
+    expires_in:
+      type: integer
+      minimum: 1
+      description: Lifetime of the access token in seconds.
+      examples:
+      - 3600
+    refresh_token:
+      type: string
+      description: |
+        Optional refresh token (RFC 6749 §5.1). Per OAuth 2.1 §4.3.1
+        and RFC 9700 §2.2.2, refresh tokens issued to public clients
+        MUST be sender-constrained (DPoP) or rotated on every use;
+        RECOMMENDED for confidential clients.
+    scope:
+      type: string
+      description: Granted scope, if different from what was requested.
+    id_token:
+      type: string
+      description: |
+        OIDC: signed JWT identifying the authenticated user. The decoded
+        payload conforms to `IDTokenClaims`. Issued only when the
+        request scope contained `openid`.
+    issued_token_type:
+      $ref: token-requests.yaml#/TokenTypeURI
+      description: |
+        REQUIRED in RFC 8693 §2.2.1 token-exchange responses; absent
+        from other token responses.
+    authorization_details:
+      type: array
+      description: |
+        RAR (RFC 9396 §6): granted authorization detail objects. MAY be
+        a subset of those requested.
+      items:
+        $ref: rar.yaml#/AuthorizationDetail
+ErrorResponse:
+  description: |
+    Standard OAuth error response shape (RFC 6749 §5.2). Spec extensions
+    contribute additional error codes — the `error` enum below is the
+    union of all registered values from this spec's covered RFCs.
+  type: object
+  required:
+  - error
+  additionalProperties: true
+  properties:
+    error:
+      type: string
+      description: Single ASCII error code from the IANA OAuth Extensions Error Registry.
+      enum:
+      - invalid_request
+      - invalid_client
+      - invalid_grant
+      - unauthorized_client
+      - unsupported_grant_type
+      - invalid_scope
+      - access_denied
+      - unsupported_response_type
+      - server_error
+      - temporarily_unavailable
+      - invalid_token
+      - insufficient_scope
+      - unsupported_token_type
+      - authorization_pending
+      - slow_down
+      - expired_token
+      - invalid_target
+      - invalid_request_uri
+      - invalid_request_object
+      - request_not_supported
+      - request_uri_not_supported
+      - invalid_authorization_details
+      - invalid_dpop_proof
+      - use_dpop_nonce
+      - insufficient_user_authentication
+      - interaction_required
+      - login_required
+      - account_selection_required
+      - consent_required
+      - registration_not_supported
+    error_description:
+      type: string
+      description: |
+        Human-readable text providing additional information for the
+        developer. ASCII printable characters only per RFC 6749 §5.2;
+        no `"`, `\`, or non-ASCII Unicode.
+      pattern: ^[\x20-\x21\x23-\x5B\x5D-\x7E]*$
+    error_uri:
+      type: string
+      format: uri
+      description: URI of a human-readable web page describing the error.
+    state:
+      type: string
+      description: |
+        Echoed `state` from the original authorization request, when
+        applicable (e.g. authorization-endpoint redirect errors).

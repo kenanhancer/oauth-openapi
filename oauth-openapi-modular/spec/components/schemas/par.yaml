@@ -1,0 +1,104 @@
+PARRequest:
+  description: |
+    All parameters of an `/authorize` request, POSTed as a form body to
+    `/par` per RFC 9126 §2.1. Per §2.1 the body MUST NOT contain
+    `request_uri` (the request_uri is what `/par` returns, not what it
+    accepts). PKCE `code_challenge` is REQUIRED to maintain parity with
+    `/authorize` under OAuth 2.1.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - type: object
+    required:
+    - client_id
+    - response_type
+    - code_challenge
+    - code_challenge_method
+    properties:
+      response_type:
+        type: string
+      client_id:
+        type: string
+      redirect_uri:
+        type: string
+        format: uri
+      scope:
+        type: string
+      state:
+        type: string
+      code_challenge:
+        type: string
+        minLength: 43
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._~-]+$
+      code_challenge_method:
+        type: string
+        enum:
+        - S256
+        default: S256
+      nonce:
+        type: string
+      prompt:
+        type: string
+      login_hint:
+        type: string
+      max_age:
+        type: integer
+        minimum: 0
+      ui_locales:
+        type: string
+      id_token_hint:
+        type: string
+      acr_values:
+        type: string
+      response_mode:
+        type: string
+      display:
+        type: string
+        enum:
+        - page
+        - popup
+        - touch
+        - wap
+      claims:
+        type: string
+        description: JSON-encoded claims request (OIDC Core §5.5).
+      authorization_details:
+        type: string
+        description: JSON-encoded array of AuthorizationDetail (RFC 9396).
+      request:
+        type: string
+        description: Optional signed JWT request object (JAR, RFC 9101 §5).
+      dpop_jkt:
+        type: string
+        description: DPoP key thumbprint binding (RFC 9449 §10.1).
+PARResponse:
+  description: |
+    RFC 9126 §2.2 — returned with HTTP 201 Created and a
+    `Cache-Control: no-store` header.
+  type: object
+  required:
+  - request_uri
+  - expires_in
+  properties:
+    request_uri:
+      type: string
+      format: uri
+      description: |
+        Reference URI to be passed to `/authorize` in the `request_uri`
+        query parameter. Per RFC 9126 §2.2 the format is at the AS's
+        discretion — it MUST contain a part generated with a
+        cryptographically strong pseudorandom algorithm, and the AS
+        MAY use the IANA-registered form
+        `urn:ietf:params:oauth:request_uri:<reference-value>`.
+      examples:
+      - urn:ietf:params:oauth:request_uri:6esc_11ACC5bwc014ltc14eY22c
+    expires_in:
+      type: integer
+      minimum: 1
+      description: |
+        Lifetime in seconds of the `request_uri`, expressed as a
+        positive integer. At the discretion of the AS but typically
+        short — e.g. between 5 and 600 seconds (RFC 9126 §2.2).
+      examples:
+      - 60

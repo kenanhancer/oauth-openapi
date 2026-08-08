@@ -1,0 +1,23 @@
+get:
+  tags:
+  - JWKS
+  operationId: jwks
+  summary: JSON Web Key Set
+  description: |
+    Returns the public keys used by this issuer to sign tokens (and
+    encrypt requests, when applicable). Clients fetch this to verify
+    JWT signatures locally. The actual path is announced by
+    `jwks_uri` in the discovery document.
+  externalDocs:
+    description: RFC 7517 §5
+    url: https://datatracker.ietf.org/doc/html/rfc7517#section-5
+  responses:
+    '200':
+      description: JSON Web Key Set
+      content:
+        application/jwk-set+json:
+          schema:
+            $ref: ../components/schemas/jose.yaml#/JWKS
+        application/json:
+          schema:
+            $ref: ../components/schemas/jose.yaml#/JWKS

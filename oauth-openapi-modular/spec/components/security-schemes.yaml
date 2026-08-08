@@ -1,0 +1,64 @@
+bearerAuth:
+  type: http
+  scheme: bearer
+  description: |
+    OAuth 2.0 Bearer Token presentation per RFC 6750 §2.1
+    (`Authorization: Bearer <token>` header). The token format is
+    implementation-defined: it MAY be opaque (validated via
+    introspection — RFC 7662) or a JWT (RFC 9068 §2 — `typ: at+jwt`,
+    validated locally against `jwks_uri`). `bearerFormat` is intentionally
+    omitted because both forms are common in the wild.
+dpop:
+  type: apiKey
+  in: header
+  name: Authorization
+  description: |
+    DPoP-bound access token (RFC 9449). The HTTP Authorization header
+    carries `DPoP <access-token>`, and a SECOND `DPoP` header MUST also
+    be sent containing a fresh proof JWT (typ=`dpop+jwt`). OpenAPI 3.1
+    cannot natively model the second-header requirement under a single
+    `securityScheme`; operations using DPoP also accept the `DPoP`
+    request-header parameter (`components.parameters.DPoPHeader`) to
+    document it. RFC 9449 §7.1 also defines a DPoP `WWW-Authenticate`
+    challenge with an `algs` parameter for resource servers.
+clientSecretBasic:
+  type: http
+  scheme: basic
+  description: |
+    Client authentication via HTTP Basic with `client_id:client_secret`
+    per RFC 6749 §2.3.1, PREFERRED over the form-body
+    `client_secret_post` variant by the same section. The form-body
+    methods (`client_secret_post`, `private_key_jwt`,
+    `client_secret_jwt`) are deliberately not separate security
+    schemes — OpenAPI cannot model body credentials — they are modeled
+    by `ClientAuthFields` inside each token-endpoint request schema,
+    with the empty security option (`{}`) covering them and public
+    clients.
+mtls:
+  type: mutualTLS
+  description: |
+    Mutual TLS client authentication per RFC 8705. Either PKI-style
+    (`tls_client_auth`) or self-signed (`self_signed_tls_client_auth`)
+    as advertised in `token_endpoint_auth_methods_supported`.
+oauth2:
+  type: oauth2
+  description: |
+    OAuth 2.0 / OIDC flows. Referenced by no operation by design: this
+    spec describes the AS itself, whose endpoints are not
+    OAuth-protected. Copy this scheme into resource-server specs to
+    declare which scopes a caller must hold. The URLs are relative so
+    they resolve against the templated `{issuer}` server.
+  flows:
+    authorizationCode:
+      authorizationUrl: /authorize
+      tokenUrl: /token
+      refreshUrl: /token
+      scopes:
+        openid: OIDC — issue an ID token
+        profile: OIDC — basic profile claims
+        email: OIDC — e-mail and verification
+        offline_access: Issue a refresh token
+    clientCredentials:
+      tokenUrl: /token
+      refreshUrl: /token
+      scopes: {}

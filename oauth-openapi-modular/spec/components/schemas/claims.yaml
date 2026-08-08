@@ -1,0 +1,143 @@
+IDTokenClaims:
+  description: |
+    Decoded payload of an OIDC ID Token. The wire form is a signed JWT
+    carried in `TokenResponse.id_token`; this schema documents the
+    payload shape so consumers can model the decoded claims.
+  type: object
+  required:
+  - iss
+  - sub
+  - aud
+  - exp
+  - iat
+  additionalProperties: true
+  properties:
+    iss:
+      $ref: jose.yaml#/StringOrURI
+      description: REQUIRED. Issuer Identifier — MUST equal the OP's `issuer`.
+    sub:
+      type: string
+      description: REQUIRED. Subject identifier (locally unique within the issuer).
+    aud:
+      description: REQUIRED. Audience(s) — MUST contain the requesting client_id.
+      oneOf:
+      - $ref: jose.yaml#/StringOrURI
+      - type: array
+        items:
+          $ref: jose.yaml#/StringOrURI
+    exp:
+      $ref: jose.yaml#/NumericDate
+      description: REQUIRED. Expiration time.
+    iat:
+      $ref: jose.yaml#/NumericDate
+      description: REQUIRED. Issued at.
+    auth_time:
+      $ref: jose.yaml#/NumericDate
+      description: REQUIRED if `max_age` was requested or `auth_time` is essential.
+    nonce:
+      type: string
+      description: REQUIRED if `nonce` was sent in the auth request.
+    acr:
+      type: string
+      description: Authentication Context Class Reference.
+    amr:
+      type: array
+      items:
+        type: string
+      description: Authentication Methods Reference (RFC 8176).
+    azp:
+      type: string
+      description: |
+        OPTIONAL. Authorized party — the party to which the ID Token was
+        issued (OIDC Core §2). Needed only when the ID Token has a SINGLE
+        audience that differs from the authorized party; if present it MUST
+        contain the `client_id`. It is NOT required merely because `aud`
+        has multiple values.
+JWTAccessTokenClaims:
+  description: |
+    Decoded payload of a JWT-profile access token per RFC 9068 §2.2.
+    Wire form is a signed JWT with JOSE header `typ: at+jwt`. When an
+    AS issues JWT access tokens (advertised via signing alg arrays in
+    discovery), `TokenResponse.access_token` will be one of these.
+  type: object
+  required:
+  - iss
+  - exp
+  - aud
+  - sub
+  - client_id
+  - iat
+  - jti
+  additionalProperties: true
+  properties:
+    iss:
+      $ref: jose.yaml#/StringOrURI
+      description: REQUIRED. Issuer Identifier of the AS.
+    exp:
+      $ref: jose.yaml#/NumericDate
+    aud:
+      description: REQUIRED. Resource server identifier(s).
+      oneOf:
+      - $ref: jose.yaml#/StringOrURI
+      - type: array
+        items:
+          $ref: jose.yaml#/StringOrURI
+    sub:
+      type: string
+      description: |
+        REQUIRED. End-user's identifier; for `client_credentials` grant
+        this MUST equal `client_id`.
+    client_id:
+      type: string
+      description: REQUIRED. Identifier of the OAuth client.
+    iat:
+      $ref: jose.yaml#/NumericDate
+    jti:
+      type: string
+      description: REQUIRED. Unique identifier for replay protection.
+    auth_time:
+      $ref: jose.yaml#/NumericDate
+    acr:
+      type: string
+    amr:
+      type: array
+      items:
+        type: string
+    scope:
+      type: string
+      description: OAuth scopes granted (space-delimited).
+    groups:
+      type: array
+      items:
+        type: string
+    roles:
+      type: array
+      items:
+        type: string
+    entitlements:
+      type: array
+      items:
+        type: string
+    cnf:
+      $ref: claims.yaml#/Confirmation
+      description: |
+        Confirmation method (RFC 7800) — present for sender-constrained
+        tokens (DPoP `cnf.jkt` per RFC 9449 §6.1, mTLS `cnf.x5t#S256`
+        per RFC 8705).
+Confirmation:
+  type: object
+  description: Token-binding confirmation methods per RFC 7800.
+  properties:
+    jkt:
+      type: string
+      description: |
+        JWK SHA-256 thumbprint per RFC 7638. Used for DPoP-bound
+        tokens (RFC 9449 §6.1).
+    x5t#S256:
+      type: string
+      description: Certificate SHA-256 thumbprint for mTLS-bound tokens (RFC 8705 §3.1).
+    jwk:
+      type: object
+      description: Embedded JWK; rarely used.
+    kid:
+      type: string

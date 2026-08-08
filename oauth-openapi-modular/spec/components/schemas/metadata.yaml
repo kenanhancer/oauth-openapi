@@ -1,0 +1,463 @@
+OpenIDProviderMetadata:
+  description: |
+    OpenID Provider metadata returned at
+    `/.well-known/openid-configuration` (OIDC Discovery 1.0 §3). It is the
+    OAuth 2.0 AS metadata plus the fields OIDC additionally makes REQUIRED.
+  allOf:
+  - $ref: metadata.yaml#/OAuthServerMetadata
+  - type: object
+    required:
+    - authorization_endpoint
+    - token_endpoint
+    - jwks_uri
+    - subject_types_supported
+    - id_token_signing_alg_values_supported
+OAuthServerMetadata:
+  description: |
+    OAuth 2.0 Authorization Server Metadata (RFC 8414 §2), returned at
+    `/.well-known/oauth-authorization-server` and reused as the base for
+    OIDC discovery. RFC 8414 makes only `issuer` and
+    `response_types_supported` UNCONDITIONALLY required; `jwks_uri` is
+    OPTIONAL, and `authorization_endpoint`/`token_endpoint` are required
+    only when a supported grant type uses them — so a valid plain-OAuth AS
+    may omit them. OIDC providers require a larger set (see
+    `OpenIDProviderMetadata`). The OIDC-specific fields
+    (`userinfo_endpoint`, `subject_types_supported`,
+    `id_token_signing_alg_values_supported`, and the `id_token_*`/
+    `userinfo_*` algorithm arrays) MAY be omitted by an OAuth-only AS.
+  type: object
+  additionalProperties: true
+  required:
+  - issuer
+  - response_types_supported
+  properties:
+    issuer:
+      type: string
+      format: uri
+      description: |
+        Canonical issuer URL using HTTPS (no query/fragment). MUST be
+        byte-identical to the value in tokens' `iss` claim and to the
+        base of the discovery URL.
+    authorization_endpoint:
+      type: string
+      format: uri
+    token_endpoint:
+      type: string
+      format: uri
+    userinfo_endpoint:
+      type: string
+      format: uri
+      description: 'OIDC: RECOMMENDED. Standard claim Endpoint per OIDC Core §5.3.'
+    jwks_uri:
+      type: string
+      format: uri
+      description: HTTPS URL of the JWK Set. REQUIRED for OIDC.
+    registration_endpoint:
+      type: string
+      format: uri
+      description: Dynamic Client Registration endpoint (RFC 7591).
+    introspection_endpoint:
+      type: string
+      format: uri
+      description: Token Introspection endpoint (RFC 7662).
+    revocation_endpoint:
+      type: string
+      format: uri
+      description: Token Revocation endpoint (RFC 7009).
+    device_authorization_endpoint:
+      type: string
+      format: uri
+      description: Device Authorization endpoint (RFC 8628).
+    pushed_authorization_request_endpoint:
+      type: string
+      format: uri
+      description: Pushed Authorization Request endpoint (RFC 9126).
+    backchannel_authentication_endpoint:
+      type: string
+      format: uri
+      description: OIDC CIBA backchannel authentication endpoint.
+    end_session_endpoint:
+      type: string
+      format: uri
+      description: OIDC RP-Initiated Logout endpoint.
+    check_session_iframe:
+      type: string
+      format: uri
+      description: 'OIDC Session Management 1.0: HTML iframe URL for session-state polling.'
+    mtls_endpoint_aliases:
+      type: object
+      description: |
+        RFC 8705 §5: aliases for endpoints when accessed via mutual TLS,
+        allowing the AS to expose mTLS-only variants of token,
+        revocation, introspection, etc.
+      properties:
+        token_endpoint:
+          type: string
+          format: uri
+        revocation_endpoint:
+          type: string
+          format: uri
+        introspection_endpoint:
+          type: string
+          format: uri
+        device_authorization_endpoint:
+          type: string
+          format: uri
+        pushed_authorization_request_endpoint:
+          type: string
+          format: uri
+        userinfo_endpoint:
+          type: string
+          format: uri
+        registration_endpoint:
+          type: string
+          format: uri
+      additionalProperties:
+        type: string
+        format: uri
+    scopes_supported:
+      type: array
+      items:
+        type: string
+    response_types_supported:
+      type: array
+      items:
+        type: string
+      description: |
+        REQUIRED. For OIDC dynamic providers, MUST include `code`,
+        `id_token`, and `id_token token` per OIDC Discovery 1.0 §3.
+        (This spec's OAuth 2.1 profile deliberately omits the
+        token-bearing response types — see `ResponseType`.)
+    response_modes_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - query
+        - fragment
+        - form_post
+        - jwt
+        - query.jwt
+        - fragment.jwt
+        - form_post.jwt
+      description: 'Default if omitted: `["query", "fragment"]`.'
+    grant_types_supported:
+      type: array
+      items:
+        type: string
+      description: 'Default if omitted: `["authorization_code", "implicit"]` per RFC 8414. (Implicit is deprecated by OAuth 2.1.)'
+    token_endpoint_auth_methods_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - none
+        - client_secret_basic
+        - client_secret_post
+        - client_secret_jwt
+        - private_key_jwt
+        - tls_client_auth
+        - self_signed_tls_client_auth
+      description: 'Default if omitted: `["client_secret_basic"]`.'
+    token_endpoint_auth_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+      description: |
+        REQUIRED when `client_secret_jwt` or `private_key_jwt` appears in
+        `token_endpoint_auth_methods_supported`. Lists JWS `alg` values
+        accepted for the `client_assertion` JWT.
+    revocation_endpoint_auth_methods_supported:
+      type: array
+      items:
+        type: string
+    revocation_endpoint_auth_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    introspection_endpoint_auth_methods_supported:
+      type: array
+      items:
+        type: string
+    introspection_endpoint_auth_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    introspection_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    introspection_encryption_alg_values_supported:
+      type: array
+      items:
+        type: string
+    introspection_encryption_enc_values_supported:
+      type: array
+      items:
+        type: string
+    id_token_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+      description: REQUIRED for OIDC. MUST include `RS256` per OIDC Core §15.1.
+    id_token_encryption_alg_values_supported:
+      type: array
+      items:
+        type: string
+    id_token_encryption_enc_values_supported:
+      type: array
+      items:
+        type: string
+    userinfo_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    userinfo_encryption_alg_values_supported:
+      type: array
+      items:
+        type: string
+    userinfo_encryption_enc_values_supported:
+      type: array
+      items:
+        type: string
+    request_object_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    request_object_encryption_alg_values_supported:
+      type: array
+      items:
+        type: string
+    request_object_encryption_enc_values_supported:
+      type: array
+      items:
+        type: string
+    subject_types_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - public
+        - pairwise
+      description: REQUIRED for OIDC.
+    claims_supported:
+      type: array
+      items:
+        type: string
+      description: 'OIDC: list of standard claim names the OP MAY supply.'
+    claim_types_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - normal
+        - aggregated
+        - distributed
+      description: 'OIDC: claim types supported. Default: `["normal"]`.'
+    claims_locales_supported:
+      type: array
+      items:
+        type: string
+    claims_parameter_supported:
+      type: boolean
+      description: Whether the OP supports the `claims` request parameter (OIDC Core §5.5).
+      default: false
+    display_values_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - page
+        - popup
+        - touch
+        - wap
+    ui_locales_supported:
+      type: array
+      items:
+        type: string
+    acr_values_supported:
+      type: array
+      items:
+        type: string
+    request_parameter_supported:
+      type: boolean
+      description: Whether the OP supports the `request` parameter (OIDC Core §6, RFC 9101 JAR).
+      default: false
+    request_uri_parameter_supported:
+      type: boolean
+      description: Whether the OP supports the `request_uri` parameter (OIDC Core §6, RFC 9126 PAR).
+      default: true
+    require_request_uri_registration:
+      type: boolean
+      description: Whether `request_uri` values MUST be pre-registered.
+      default: false
+    require_pushed_authorization_requests:
+      type: boolean
+      description: 'PAR (RFC 9126): if true, `/authorize` MUST be reached via `request_uri` from PAR.'
+      default: false
+    require_signed_request_object:
+      type: boolean
+      description: AS requires signed Request Objects via request/request_uri (RFC 9101 §9.2, §10.5).
+      default: false
+    code_challenge_methods_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - S256
+      description: |
+        PKCE methods supported. Profiled to `["S256"]` here: S256 is
+        mandatory to implement on the AS (OAuth 2.1 §4.1.1), and per
+        RFC 9700 §2.1.1 clients SHOULD use a method that does not
+        expose the verifier — so the legacy `plain` method is omitted.
+    dpop_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    tls_client_certificate_bound_access_tokens:
+      type: boolean
+      description: |
+        Whether the AS issues access tokens bound to a TLS client
+        certificate's hash (cnf.x5t#S256). RFC 8705 §3.
+      default: false
+    authorization_details_types_supported:
+      type: array
+      items:
+        type: string
+    authorization_response_iss_parameter_supported:
+      type: boolean
+      description: |
+        Whether the AS includes an `iss` parameter in authorization
+        responses for mix-up attack prevention. RFC 9207.
+      default: false
+    protected_resources:
+      type: array
+      items:
+        type: string
+        format: uri
+      description: Resource identifiers whose metadata this AS oversees (RFC 9728 §4).
+    frontchannel_logout_supported:
+      type: boolean
+      default: false
+    frontchannel_logout_session_supported:
+      type: boolean
+      default: false
+    backchannel_logout_supported:
+      type: boolean
+      default: false
+    backchannel_logout_session_supported:
+      type: boolean
+      default: false
+    http_logout_supported:
+      type: boolean
+      description: Legacy OIDC HTTP-Based Logout (older Microsoft).
+      default: false
+    backchannel_token_delivery_modes_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - poll
+        - ping
+        - push
+    backchannel_user_code_parameter_supported:
+      type: boolean
+      default: false
+    backchannel_authentication_request_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    service_documentation:
+      type: string
+      format: uri
+    op_policy_uri:
+      type: string
+      format: uri
+    op_tos_uri:
+      type: string
+      format: uri
+    signed_metadata:
+      type: string
+      description: |
+        JWT containing all of the above metadata, signed by the AS.
+        When present, takes precedence over individual fields per
+        RFC 8414 §3.1.
+ProtectedResourceMetadata:
+  description: |
+    Protected-resource (resource server) metadata per RFC 9728 §2, served
+    at `/.well-known/oauth-protected-resource`. Open to extension members
+    (§3.2); a signed form MAY be supplied via `signed_metadata`.
+  type: object
+  required:
+  - resource
+  additionalProperties: true
+  properties:
+    resource:
+      $ref: jose.yaml#/StringOrURI
+      description: |
+        REQUIRED. Resource identifier — an https URL with no fragment
+        (RFC 9728 §2); MUST match the `aud`/`resource` value clients use.
+    authorization_servers:
+      type: array
+      items:
+        type: string
+        format: uri
+      description: Issuer identifiers of ASes that can issue tokens for this resource.
+    jwks_uri:
+      type: string
+      format: uri
+    scopes_supported:
+      type: array
+      items:
+        type: string
+    bearer_methods_supported:
+      type: array
+      items:
+        type: string
+        enum:
+        - header
+        - body
+        - query
+      description: |
+        How a bearer token may be presented (RFC 6750 §2). `query` is
+        listed because RFC 9728 §2 registers it, but clients MUST NOT
+        send tokens in a URI query parameter and resource servers MUST
+        ignore tokens presented that way (RFC 9700 §4.3.2,
+        OAuth 2.1 §5.1).
+    resource_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+      description: JWS algs for signed resource responses; `none` MUST NOT be used.
+    resource_name:
+      type: string
+    resource_documentation:
+      type: string
+      format: uri
+    resource_policy_uri:
+      type: string
+      format: uri
+    resource_tos_uri:
+      type: string
+      format: uri
+    tls_client_certificate_bound_access_tokens:
+      type: boolean
+      default: false
+    authorization_details_types_supported:
+      type: array
+      items:
+        type: string
+    dpop_signing_alg_values_supported:
+      type: array
+      items:
+        type: string
+    dpop_bound_access_tokens_required:
+      type: boolean
+      default: false
+      description: Whether the resource requires DPoP-bound access tokens (RFC 9449).
+    signed_metadata:
+      type: string
+      description: |
+        JWT (JWS compact) asserting these metadata values as claims, with
+        a REQUIRED `iss`; takes precedence over the plain-JSON members
+        (RFC 9728 §2.2).

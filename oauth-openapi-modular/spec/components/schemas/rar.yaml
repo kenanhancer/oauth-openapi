@@ -1,0 +1,39 @@
+AuthorizationDetail:
+  description: |
+    A single authorization detail object per RFC 9396 §2. Sent in the
+    `authorization_details` parameter at `/authorize`, `/par`, and
+    `/token`; echoed back in token and introspection responses.
+    Type-specific fields are added by each `type`'s consuming RFC.
+  type: object
+  required:
+  - type
+  additionalProperties: true
+  properties:
+    type:
+      type: string
+      description: |
+        REQUIRED. Identifier of the authorization detail type, defined
+        by extending RFCs (e.g. `payment_initiation` for FAPI 2.0).
+    locations:
+      type: array
+      items:
+        type: string
+        format: uri
+      description: Resource server locations this detail applies to.
+    actions:
+      type: array
+      items:
+        type: string
+      description: Permitted actions (e.g. `read`, `write`).
+    datatypes:
+      type: array
+      items:
+        type: string
+      description: Data type categories (e.g. `account_info`).
+    identifier:
+      type: string
+      description: Type-specific identifier (e.g. an account number).
+    privileges:
+      type: array
+      items:
+        type: string

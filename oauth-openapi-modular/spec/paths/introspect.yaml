@@ -1,0 +1,49 @@
+post:
+  tags:
+  - Token Lifecycle
+  operationId: introspect
+  summary: Token introspection
+  description: |
+    A protected resource queries the authorization server about the
+    meta-information of a token (active state, scopes, expiry, subject).
+    Critical for opaque (non-JWT) tokens. JWT tokens can usually be
+    validated locally by verifying the signature against the JWKS.
+  externalDocs:
+    description: RFC 7662 §2
+    url: https://datatracker.ietf.org/doc/html/rfc7662#section-2
+  requestBody:
+    required: true
+    content:
+      application/x-www-form-urlencoded:
+        schema:
+          $ref: ../components/schemas/introspection.yaml#/IntrospectionRequest
+  responses:
+    '200':
+      description: Introspection result (always 200, even for inactive tokens).
+      headers:
+        Cache-Control:
+          $ref: ../components/headers.yaml#/CacheControlNoStore
+        Pragma:
+          $ref: ../components/headers.yaml#/PragmaNoCache
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/introspection.yaml#/IntrospectionResponse
+        application/token-introspection+jwt:
+          schema:
+            $ref: ../components/schemas/jose.yaml#/JWT
+            description: |
+              Signed (optionally encrypted) JWT introspection response per
+              RFC 9701 — the body is a compact JWT (not JSON), requested via
+              `Accept: application/token-introspection+jwt` with JOSE `typ`
+              header `token-introspection+jwt`. Its decoded payload conforms
+              to `JWTIntrospectionResponse` (the RFC 7662 members nested
+              under the `token_introspection` claim).
+    '400':
+      $ref: ../components/responses.yaml#/OAuthError
+    '401':
+      $ref: ../components/responses.yaml#/IntrospectionAuthError
+  security:
+  - clientSecretBasic: []
+  - mtls: []
+  - bearerAuth: []

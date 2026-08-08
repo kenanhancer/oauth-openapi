@@ -1,0 +1,135 @@
+JWKS:
+  type: object
+  required:
+  - keys
+  properties:
+    keys:
+      type: array
+      items:
+        $ref: jose.yaml#/JWK
+JWK:
+  type: object
+  required:
+  - kty
+  additionalProperties: true
+  description: |
+    JSON Web Key per RFC 7517 §4. Algorithm-specific parameters are
+    defined in RFC 7518 (JWA) and RFC 8037 (OKP). The `kty` enum is
+    kept open per the IANA registry — additional key types (e.g.
+    post-quantum) may appear over time.
+  properties:
+    kty:
+      type: string
+      description: Key Type (RFC 7517 §4.1) — IANA-registered.
+      examples:
+      - RSA
+      - EC
+      - OKP
+      - oct
+    use:
+      type: string
+      enum:
+      - sig
+      - enc
+      description: |
+        Public Key Use (§4.2). `sig` for signature, `enc` for
+        encryption. `use` and `key_ops` SHOULD NOT be used together; if
+        both are present the information they convey MUST be consistent
+        (RFC 7517 §4.3).
+    key_ops:
+      type: array
+      description: |
+        Allowed key operations (§4.3). Values are from the IANA
+        JSON Web Key Operations registry (§8.3): `sign`, `verify`,
+        `encrypt`, `decrypt`, `wrapKey`, `unwrapKey`, `deriveKey`,
+        `deriveBits`. `key_ops` and `use` SHOULD NOT be used together; if
+        both are present they MUST be consistent (RFC 7517 §4.3).
+      items:
+        type: string
+        enum:
+        - sign
+        - verify
+        - encrypt
+        - decrypt
+        - wrapKey
+        - unwrapKey
+        - deriveKey
+        - deriveBits
+    alg:
+      type: string
+      description: Algorithm intended for use with the key (§4.4).
+      examples:
+      - RS256
+      - RS384
+      - RS512
+      - ES256
+      - ES384
+      - ES512
+      - EdDSA
+      - PS256
+      - HS256
+    kid:
+      type: string
+      description: Key ID for selection in a JWKS (§4.5).
+    x5u:
+      type: string
+      format: uri
+      description: URL of an X.509 certificate or chain (§4.6).
+    x5c:
+      type: array
+      description: |
+        X.509 certificate chain (§4.7). Each item is a **base64-encoded**
+        (NOT base64url-encoded) DER PKIX certificate. The first entry is
+        the certificate corresponding to the public key.
+      items:
+        type: string
+    x5t:
+      type: string
+      description: X.509 SHA-1 thumbprint (§4.8); base64url-encoded.
+    x5t#S256:
+      type: string
+      description: X.509 SHA-256 thumbprint (§4.9); base64url-encoded.
+    n:
+      type: string
+      description: RSA modulus, base64url-encoded.
+    e:
+      type: string
+      description: RSA exponent, base64url-encoded.
+    crv:
+      type: string
+      description: |
+        Curve identifier. EC: `P-256`, `P-384`, `P-521`,
+        `secp256k1`. OKP (RFC 8037): `Ed25519`, `Ed448`, `X25519`, `X448`.
+    x:
+      type: string
+      description: EC/OKP x coordinate or public key, base64url.
+    y:
+      type: string
+      description: EC y coordinate, base64url. Not used for OKP.
+    k:
+      type: string
+      description: Symmetric key value (oct kty), base64url-encoded.
+JWT:
+  type: string
+  description: |
+    A JWT in JWS Compact Serialization format per RFC 7519 §3 — three
+    base64url segments separated by dots: `header.payload.signature`.
+    For JWE-encrypted JWTs, five segments separated by dots.
+  pattern: ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)?$
+  examples:
+  - eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature_here
+StringOrURI:
+  type: string
+  description: |
+    Per RFC 7519 §2: an arbitrary string value; if the string contains a
+    `:` character, it MUST be a URI per RFC 3986. Used for `iss`, `aud`,
+    `sub`, `jti` JWT claims.
+NumericDate:
+  type: number
+  description: |
+    Per RFC 7519 §2: number containing seconds since 1970-01-01T00:00:00Z UTC,
+    ignoring leap seconds. NOT necessarily an integer — fractional seconds
+    are permitted.
+  examples:
+  - 1735689600
+  - 1735689600.123

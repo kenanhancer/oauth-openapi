@@ -1,0 +1,50 @@
+post:
+  tags:
+  - Device Flow
+  operationId: deviceAuthorization
+  summary: Device Authorization Endpoint (RFC 8628)
+  description: |
+    Initiates the Device Authorization Grant. The client receives a
+    `device_code` and `user_code`; the user is instructed to visit
+    `verification_uri` on a second device and enter the `user_code`.
+    The client then polls `/token` with
+    `grant_type=urn:ietf:params:oauth:grant-type:device_code` until the
+    user authorizes or `expires_in` elapses.
+
+    Polling protocol (RFC 8628 §3.5): the AS may return `slow_down` to
+    increase the polling interval by 5 seconds, or `authorization_pending`
+    while the user is still consenting. Clients MUST stop polling on any
+    non-pending error (`access_denied`, `expired_token`).
+
+    The `device_code` MUST NOT be displayed to the end user.
+    The `user_code` is per §6.1 displayed to the user; servers SHOULD
+    accept dashed and case-insensitive variants.
+  externalDocs:
+    description: RFC 8628 §3.1
+    url: https://datatracker.ietf.org/doc/html/rfc8628#section-3.1
+  requestBody:
+    required: true
+    content:
+      application/x-www-form-urlencoded:
+        schema:
+          $ref: ../components/schemas/device.yaml#/DeviceAuthorizationRequest
+  responses:
+    '200':
+      description: Device authorization issued.
+      headers:
+        Cache-Control:
+          $ref: ../components/headers.yaml#/CacheControlNoStore
+        Pragma:
+          $ref: ../components/headers.yaml#/PragmaNoCache
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/device.yaml#/DeviceAuthorizationResponse
+    '400':
+      $ref: ../components/responses.yaml#/OAuthError
+    '401':
+      $ref: ../components/responses.yaml#/ClientAuthError
+  security:
+  - clientSecretBasic: []
+  - mtls: []
+  - {}

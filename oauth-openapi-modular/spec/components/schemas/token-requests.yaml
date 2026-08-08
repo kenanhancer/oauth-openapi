@@ -1,0 +1,239 @@
+TokenRequest:
+  description: |
+    Discriminated union of all supported token-request bodies, keyed by
+    `grant_type` per RFC 6749 §3.2.
+  oneOf:
+  - $ref: token-requests.yaml#/AuthorizationCodeTokenRequest
+  - $ref: token-requests.yaml#/ClientCredentialsTokenRequest
+  - $ref: token-requests.yaml#/RefreshTokenRequest
+  - $ref: token-requests.yaml#/DeviceCodeTokenRequest
+  - $ref: token-requests.yaml#/JWTBearerTokenRequest
+  - $ref: token-requests.yaml#/TokenExchangeRequest
+  discriminator:
+    propertyName: grant_type
+    mapping:
+      authorization_code: token-requests.yaml#/AuthorizationCodeTokenRequest
+      client_credentials: token-requests.yaml#/ClientCredentialsTokenRequest
+      refresh_token: token-requests.yaml#/RefreshTokenRequest
+      urn:ietf:params:oauth:grant-type:device_code: token-requests.yaml#/DeviceCodeTokenRequest
+      urn:ietf:params:oauth:grant-type:jwt-bearer: token-requests.yaml#/JWTBearerTokenRequest
+      urn:ietf:params:oauth:grant-type:token-exchange: token-requests.yaml#/TokenExchangeRequest
+ClientAuthFields:
+  type: object
+  properties:
+    client_id:
+      type: string
+      description: |
+        REQUIRED for unauthenticated (public) clients per RFC 6749
+        §3.2.1. OPTIONAL when authenticating via `client_assertion` —
+        the assertion's subject already identifies the client; if sent
+        anyway it MUST identify the same client (RFC 7521 §4.2).
+    client_secret:
+      type: string
+      description: |
+        Used with `client_id` for `client_secret_post` authentication.
+        HTTP Basic (`client_secret_basic`) is preferred; this form-body
+        variant is NOT RECOMMENDED per RFC 6749 §2.3.1.
+    client_assertion:
+      type: string
+      description: |
+        JWT bearing claims that authenticate the client. Used with
+        `client_assertion_type` for `client_secret_jwt` or
+        `private_key_jwt` authentication. RFC 7523 §2.2.
+    client_assertion_type:
+      type: string
+      const: urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+      description: RFC 7523 §2.2.
+ResourceIndicators:
+  type: object
+  properties:
+    resource:
+      type: array
+      description: |
+        Indicator(s) of the protected resource(s) for which the access
+        token is requested. Each value MUST be an absolute URI without
+        a fragment component, and SHOULD NOT include a query component.
+        The parameter MAY be included multiple times in the underlying
+        form-encoded body. RFC 8707 §2. Some vendors use a non-standard
+        `audience` parameter for the same purpose (e.g. Auth0); this
+        spec models only the standard `resource`.
+      items:
+        type: string
+        format: uri
+AuthorizationDetailsField:
+  type: object
+  properties:
+    authorization_details:
+      type: string
+      description: |
+        JSON-encoded array of `AuthorizationDetail` objects (RFC 9396 §5).
+        Sent as a string because the form-encoded body cannot carry
+        structured JSON natively. The decoded value conforms to
+        `AuthorizationDetail[]`.
+AuthorizationCodeTokenRequest:
+  description: |
+    RFC 6749 §4.1.3 with PKCE per RFC 7636 §4.5. Under OAuth 2.1 §10.2 the
+    `redirect_uri` parameter is no longer sent at the token endpoint and
+    is omitted from `required`.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - type: object
+    required:
+    - grant_type
+    - code
+    - code_verifier
+    properties:
+      grant_type:
+        type: string
+        const: authorization_code
+      code:
+        type: string
+        description: The authorization code received from `/authorize`.
+      redirect_uri:
+        type: string
+        format: uri
+        description: |
+          OPTIONAL under OAuth 2.1 §10.2 (was REQUIRED in OAuth 2.0
+          §4.1.3). When present, MUST match the `redirect_uri` used at
+          `/authorize`. Some legacy AS implementations still require it.
+      code_verifier:
+        type: string
+        minLength: 43
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._~-]+$
+        description: |
+          PKCE verifier (RFC 7636 §4.1). 43-128 chars from the
+          unreserved set `[A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"`.
+ClientCredentialsTokenRequest:
+  description: RFC 6749 §4.4. Service-to-service grant, no end user.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - $ref: token-requests.yaml#/AuthorizationDetailsField
+  - type: object
+    required:
+    - grant_type
+    properties:
+      grant_type:
+        type: string
+        const: client_credentials
+      scope:
+        type: string
+        description: Space-delimited list of requested scopes.
+RefreshTokenRequest:
+  description: |
+    RFC 6749 §6. Per OAuth 2.1 §4.3.1 and RFC 9700 §2.2.2, refresh tokens
+    issued to PUBLIC clients MUST be sender-constrained (DPoP) or rotated
+    on every use; for confidential clients this is RECOMMENDED (they are
+    already bound to the authenticating client).
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - $ref: token-requests.yaml#/AuthorizationDetailsField
+  - type: object
+    required:
+    - grant_type
+    - refresh_token
+    properties:
+      grant_type:
+        type: string
+        const: refresh_token
+      refresh_token:
+        type: string
+      scope:
+        type: string
+        description: |
+          Optional. If present, MUST be no broader than the originally
+          granted scope. RFC 8707: the `resource` parameter on a
+          refresh request MUST be a subset of those originally granted.
+DeviceCodeTokenRequest:
+  description: RFC 8628 §3.4. Polled by the client until the user authorizes.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - type: object
+    required:
+    - grant_type
+    - device_code
+    properties:
+      grant_type:
+        type: string
+        const: urn:ietf:params:oauth:grant-type:device_code
+      device_code:
+        type: string
+        description: |
+          The opaque `device_code` from `/device_authorization`.
+          MUST NOT be displayed to the end user.
+JWTBearerTokenRequest:
+  description: |
+    RFC 7523 §2.1. Note that the JWT itself authenticates the client in
+    most uses, so `client_assertion_*` is usually omitted.
+  allOf:
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - type: object
+    required:
+    - grant_type
+    - assertion
+    properties:
+      grant_type:
+        type: string
+        const: urn:ietf:params:oauth:grant-type:jwt-bearer
+      assertion:
+        type: string
+        description: |
+          Signed JWT bearer assertion. REQUIRED claims (RFC 7523 §3):
+          `iss`, `sub`, `aud` (the AS token endpoint URL), `exp`.
+          RECOMMENDED: `nbf`, `iat`, `jti`. The JWT MUST be digitally
+          signed or MAC'd by the issuer and MUST be rejected by the AS
+          if any required claim is missing or invalid.
+      scope:
+        type: string
+TokenExchangeRequest:
+  description: RFC 8693 §2.1.
+  allOf:
+  - $ref: token-requests.yaml#/ClientAuthFields
+  - $ref: token-requests.yaml#/ResourceIndicators
+  - $ref: token-requests.yaml#/AuthorizationDetailsField
+  - type: object
+    required:
+    - grant_type
+    - subject_token
+    - subject_token_type
+    properties:
+      grant_type:
+        type: string
+        const: urn:ietf:params:oauth:grant-type:token-exchange
+      subject_token:
+        type: string
+        description: Token representing the identity of the party on whose behalf the request is made.
+      subject_token_type:
+        $ref: token-requests.yaml#/TokenTypeURI
+      actor_token:
+        type: string
+        description: Token representing the identity of the acting party (delegation/impersonation).
+      actor_token_type:
+        $ref: token-requests.yaml#/TokenTypeURI
+        description: REQUIRED when `actor_token` is present.
+      requested_token_type:
+        $ref: token-requests.yaml#/TokenTypeURI
+        description: Type of token the client is requesting be issued.
+      audience:
+        type: array
+        description: |
+          RFC 8693-defined parameter (distinct from RFC 8707 `resource`).
+          Logical name(s) of the target service(s). MAY appear multiple
+          times in the form body — modeled here as array.
+        items:
+          type: string
+      scope:
+        type: string
+TokenTypeURI:
+  type: string
+  enum:
+  - urn:ietf:params:oauth:token-type:access_token
+  - urn:ietf:params:oauth:token-type:refresh_token
+  - urn:ietf:params:oauth:token-type:id_token
+  - urn:ietf:params:oauth:token-type:saml1
+  - urn:ietf:params:oauth:token-type:saml2
+  - urn:ietf:params:oauth:token-type:jwt

@@ -1,0 +1,68 @@
+CacheControlNoStore:
+  description: Required on token-bearing JSON responses (RFC 6749 §5.1).
+  schema:
+    type: string
+    const: no-store
+PragmaNoCache:
+  description: HTTP/1.0 cache directive paired with Cache-Control (RFC 6749 §5.1).
+  schema:
+    type: string
+    const: no-cache
+WWWAuthenticateBearerDPoP:
+  description: |
+    Combined authentication challenge from a protected resource that
+    accepts BOTH Bearer (RFC 6750 §3) and DPoP-bound (RFC 9449 §7)
+    access tokens. RFC 9110 §11.6.1 permits a single response to
+    advertise multiple schemes in one header, and RFC 9449 §7.2 governs
+    how error information is distributed across them:
+      - no credentials sent -> challenge carries no error info (Fig 17)
+      - scheme unambiguous   -> error info on the used scheme  (Fig 18)
+      - scheme ambiguous     -> error info on both schemes     (Fig 19)
+    The DPoP `algs` parameter lists the JWS algorithms the resource
+    accepts for DPoP proofs (RFC 9449 §5). The standalone Bearer format
+    (RFC 6750 §3) is the same header without the trailing `DPoP` scheme.
+
+    Additional auth-params may appear on the challenge:
+      - `resource_metadata` — URL of the resource's metadata document
+        (RFC 9728 §5.1).
+      - `acr_values` / `max_age` — step-up requirement, signalled with
+        `error="insufficient_user_authentication"` (RFC 9470 §3).
+  schema:
+    type: string
+    examples:
+    - Bearer, DPoP algs="ES256 PS256"
+    - Bearer error="invalid_token", error_description="The access token expired", DPoP algs="ES256 EdDSA"
+    - Bearer error="invalid_token", resource_metadata="https://rs.example/.well-known/oauth-protected-resource"
+    - Bearer error="insufficient_user_authentication", acr_values="urn:mace:incommon:iap:silver", max_age="0"
+WWWAuthenticateBasic:
+  description: |
+    HTTP Basic challenge returned on a 401 from a client-authenticated
+    endpoint when the client used the `Authorization` header and the
+    credentials were invalid. RFC 6749 §5.2 REQUIRES the AS to emit a
+    `WWW-Authenticate` header matching the scheme the client used; for
+    `client_secret_basic` that scheme is Basic (RFC 7617).
+  schema:
+    type: string
+    examples:
+    - Basic realm="as.example.com"
+    - Basic realm="as.example.com", error="invalid_client"
+WWWAuthenticateBasicBearer:
+  description: |
+    Combined challenge for the introspection endpoint, which authenticates
+    callers EITHER with client credentials (Basic, RFC 6749 §5.2) OR with
+    the protected resource's own bearer token (RFC 6750 §3). RFC 7662 §2.3
+    routes the failure to whichever was used, and RFC 9110 §11.6.1 permits
+    advertising both schemes in one header. DPoP is intentionally absent —
+    the introspection endpoint does not accept DPoP-bound tokens.
+  schema:
+    type: string
+    examples:
+    - Basic realm="as.example.com", Bearer
+    - Bearer error="invalid_token", error_description="The access token expired"
+DPoPNonce:
+  description: |
+    Server-issued nonce that MUST be echoed in the next DPoP proof's
+    `nonce` claim (RFC 9449 §8). Servers MAY rotate the nonce on every
+    response.
+  schema:
+    type: string

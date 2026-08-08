@@ -1,0 +1,80 @@
+OAuthError:
+  description: Standard OAuth 2.0 error response (RFC 6749 §5.2)
+  headers:
+    Cache-Control:
+      $ref: headers.yaml#/CacheControlNoStore
+    Pragma:
+      $ref: headers.yaml#/PragmaNoCache
+  content:
+    application/json:
+      schema:
+        $ref: schemas/token-responses.yaml#/ErrorResponse
+OAuthErrorWithDPoPNonce:
+  description: |
+    OAuth 2.0 error (RFC 6749 §5.2) at a DPoP-capable endpoint. When the
+    AS requires a DPoP nonce it answers `use_dpop_nonce` with HTTP 400 AND
+    a `DPoP-Nonce` header carrying the nonce to use in the retried proof
+    (RFC 9449 §8). The header is absent on other 400 errors.
+  headers:
+    Cache-Control:
+      $ref: headers.yaml#/CacheControlNoStore
+    Pragma:
+      $ref: headers.yaml#/PragmaNoCache
+    DPoP-Nonce:
+      $ref: headers.yaml#/DPoPNonce
+  content:
+    application/json:
+      schema:
+        $ref: schemas/token-responses.yaml#/ErrorResponse
+ProtectedResourceError:
+  description: |
+    Authentication error from a protected resource that accepts both
+    Bearer and DPoP-bound access tokens (RFC 6750 §3, RFC 9449 §7.2).
+    The `WWW-Authenticate` header carries a combined challenge offering
+    both schemes (RFC 9110 §11.6.1); `DPoP-Nonce` is returned when the
+    resource requires the client to retry the DPoP proof with a
+    server-provided nonce (RFC 9449 §8, §9).
+  headers:
+    WWW-Authenticate:
+      $ref: headers.yaml#/WWWAuthenticateBearerDPoP
+    DPoP-Nonce:
+      $ref: headers.yaml#/DPoPNonce
+  content:
+    application/json:
+      schema:
+        $ref: schemas/token-responses.yaml#/ErrorResponse
+ClientAuthError:
+  description: |
+    Client authentication failed (`invalid_client`) on a token-family
+    endpoint. RFC 6749 §5.2: when the client authenticated via the
+    `Authorization` header, the AS MUST return 401 with a matching
+    `WWW-Authenticate` challenge. Used for HTTP 401 only — a malformed
+    request (HTTP 400) uses `OAuthError`, which needs no challenge.
+  headers:
+    WWW-Authenticate:
+      $ref: headers.yaml#/WWWAuthenticateBasic
+    Cache-Control:
+      $ref: headers.yaml#/CacheControlNoStore
+    Pragma:
+      $ref: headers.yaml#/PragmaNoCache
+  content:
+    application/json:
+      schema:
+        $ref: schemas/token-responses.yaml#/ErrorResponse
+IntrospectionAuthError:
+  description: |
+    Authentication failed at the introspection endpoint. Per RFC 7662 §2.3
+    the AS returns 401 with a `WWW-Authenticate` challenge for the scheme
+    the caller used — Basic for client credentials (RFC 6749 §5.2) or
+    Bearer for a protected-resource access token (RFC 6750 §3).
+  headers:
+    WWW-Authenticate:
+      $ref: headers.yaml#/WWWAuthenticateBasicBearer
+    Cache-Control:
+      $ref: headers.yaml#/CacheControlNoStore
+    Pragma:
+      $ref: headers.yaml#/PragmaNoCache
+  content:
+    application/json:
+      schema:
+        $ref: schemas/token-responses.yaml#/ErrorResponse

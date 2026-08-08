@@ -1,0 +1,68 @@
+openidConfiguration:
+  get:
+    tags:
+    - Discovery
+    operationId: openidConfiguration
+    summary: OIDC discovery metadata
+    description: |
+      Standardized discovery endpoint published by every OpenID Connect
+      provider. The response describes all endpoints, supported flows,
+      scopes, claims, signing algorithms, and capabilities.
+
+      This is the **only path that is truly standardized across OIDC
+      providers** — all other endpoint URLs are vendor-defined and must be
+      read from this document.
+    externalDocs:
+      description: OIDC Discovery 1.0 §3
+      url: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata
+    responses:
+      '200':
+        description: Provider metadata
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/metadata.yaml#/OpenIDProviderMetadata
+oauthAuthorizationServer:
+  get:
+    tags:
+    - Discovery
+    operationId: authorizationServerMetadata
+    summary: OAuth 2.0 authorization-server metadata (RFC 8414)
+    description: |
+      Equivalent to the OIDC discovery document for plain OAuth 2.0
+      servers that do not implement OpenID Connect. The response shape
+      is a strict subset of the OIDC discovery document.
+    externalDocs:
+      description: RFC 8414 §3
+      url: https://datatracker.ietf.org/doc/html/rfc8414#section-3
+    responses:
+      '200':
+        description: Authorization server metadata
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/metadata.yaml#/OAuthServerMetadata
+oauthProtectedResource:
+  get:
+    tags:
+    - Discovery
+    operationId: protectedResourceMetadata
+    summary: OAuth 2.0 protected-resource metadata (RFC 9728)
+    description: |
+      Metadata published by a protected resource (resource server): which
+      authorization servers it trusts, the scopes it understands, supported
+      bearer-token methods, and whether it requires DPoP-bound tokens. A
+      client or AS reads this to learn how to obtain and present tokens for
+      the resource. The resource advertises this document's URL via the
+      `resource_metadata` parameter of a `WWW-Authenticate` challenge
+      (RFC 9728 §5.1).
+    externalDocs:
+      description: RFC 9728 §3
+      url: https://datatracker.ietf.org/doc/html/rfc9728#section-3
+    responses:
+      '200':
+        description: Protected resource metadata
+        content:
+          application/json:
+            schema:
+              $ref: ../components/schemas/metadata.yaml#/ProtectedResourceMetadata

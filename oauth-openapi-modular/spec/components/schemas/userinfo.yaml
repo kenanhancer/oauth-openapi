@@ -1,0 +1,90 @@
+UserInfoResponse:
+  description: |
+    OIDC standard claims (§5.1) returned by `/userinfo`. The `sub` claim
+    is REQUIRED; all others are optional and depend on requested scopes.
+  type: object
+  required:
+  - sub
+  properties:
+    sub:
+      type: string
+    name:
+      type: string
+    given_name:
+      type: string
+    family_name:
+      type: string
+    middle_name:
+      type: string
+    nickname:
+      type: string
+    preferred_username:
+      type: string
+    profile:
+      type: string
+      format: uri
+    picture:
+      type: string
+      format: uri
+    website:
+      type: string
+      format: uri
+    email:
+      type: string
+      format: email
+    email_verified:
+      type: boolean
+    gender:
+      type: string
+    birthdate:
+      type: string
+      format: date
+    zoneinfo:
+      type: string
+    locale:
+      type: string
+    phone_number:
+      type: string
+    phone_number_verified:
+      type: boolean
+    address:
+      type: object
+      properties:
+        formatted:
+          type: string
+        street_address:
+          type: string
+        locality:
+          type: string
+        region:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+    updated_at:
+      $ref: jose.yaml#/NumericDate
+UserInfoSignedResponse:
+  description: |
+    Decoded payload of a signed UserInfo response per OIDC Core
+    §5.3.2. On the wire the `application/jwt` body is a compact JWT
+    string (see the `JWT` schema); this documentation-only schema
+    describes that JWT's payload, which adds `iss` (REQUIRED — the OP)
+    and `aud` (REQUIRED — the requesting client) to the standard
+    claims.
+  allOf:
+  - type: object
+    required:
+    - iss
+    - aud
+    - sub
+    properties:
+      iss:
+        $ref: jose.yaml#/StringOrURI
+      aud:
+        oneOf:
+        - $ref: jose.yaml#/StringOrURI
+        - type: array
+          items:
+            $ref: jose.yaml#/StringOrURI
+  - $ref: userinfo.yaml#/UserInfoResponse

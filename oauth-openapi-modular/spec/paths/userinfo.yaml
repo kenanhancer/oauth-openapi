@@ -1,0 +1,89 @@
+get:
+  tags:
+  - OpenID Connect
+  operationId: userinfoGet
+  summary: UserInfo endpoint (GET, OIDC)
+  description: |
+    Returns claims about the authenticated end-user. Requires a valid
+    OIDC access token in the `Authorization` header (Bearer or DPoP).
+    When the response is `application/jwt` (signed/encrypted), the JWT
+    also carries `iss` and `aud` claims (OIDC Core §5.3.2).
+  externalDocs:
+    description: OIDC Core §5.3
+    url: https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+  parameters:
+  - $ref: ../components/parameters.yaml#/DPoPHeader
+  responses:
+    '200':
+      description: UserInfo claims
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/userinfo.yaml#/UserInfoResponse
+        application/jwt:
+          schema:
+            $ref: ../components/schemas/jose.yaml#/JWT
+            description: |
+              OIDC Core §5.3.2 — when the client registered a
+              `userinfo_signed_response_alg`, the body is a signed
+              (optionally encrypted) compact JWT, not JSON. Its decoded
+              payload conforms to `UserInfoSignedResponse` (the standard
+              claims plus mandatory `iss` and `aud`).
+    '401':
+      $ref: ../components/responses.yaml#/ProtectedResourceError
+    '403':
+      $ref: ../components/responses.yaml#/ProtectedResourceError
+  security:
+  - bearerAuth: []
+  - dpop: []
+post:
+  tags:
+  - OpenID Connect
+  operationId: userinfoPost
+  summary: UserInfo endpoint (POST, OIDC)
+  description: |
+    Same semantics as GET; some clients prefer POST per OIDC Core §5.3.1.
+    Either `application/x-www-form-urlencoded` (with `access_token` form
+    field) or an Authorization header.
+  externalDocs:
+    description: OIDC Core §5.3.1
+    url: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoRequest
+  parameters:
+  - $ref: ../components/parameters.yaml#/DPoPHeader
+  requestBody:
+    required: false
+    content:
+      application/x-www-form-urlencoded:
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+              description: |
+                Bearer token sent as a form-encoded body parameter per
+                RFC 6750 §2.2. SHOULD NOT be used unless the
+                Authorization header is unavailable to the client
+                (OIDC Core §5.3.1).
+  responses:
+    '200':
+      description: UserInfo claims
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/userinfo.yaml#/UserInfoResponse
+        application/jwt:
+          schema:
+            $ref: ../components/schemas/jose.yaml#/JWT
+            description: |
+              OIDC Core §5.3.2 — when the client registered a
+              `userinfo_signed_response_alg`, the body is a signed
+              (optionally encrypted) compact JWT, not JSON. Its decoded
+              payload conforms to `UserInfoSignedResponse` (the standard
+              claims plus mandatory `iss` and `aud`).
+    '401':
+      $ref: ../components/responses.yaml#/ProtectedResourceError
+    '403':
+      $ref: ../components/responses.yaml#/ProtectedResourceError
+  security:
+  - bearerAuth: []
+  - dpop: []

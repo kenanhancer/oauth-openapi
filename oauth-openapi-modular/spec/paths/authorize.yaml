@@ -1,0 +1,94 @@
+get:
+  tags:
+  - Core
+  operationId: authorize
+  summary: Authorization endpoint
+  description: |
+    Initiates a browser-driven authorization request. The user-agent is
+    navigated to this URL; the server authenticates the resource owner and
+    obtains consent, then redirects the user-agent back to `redirect_uri`
+    with a `code` (success) or an `error`.
+
+    Under OAuth 2.1 only `response_type=code` is permitted (Implicit is
+    deprecated). PKCE (`code_challenge`) is mandatory for public
+    clients — and for confidential clients too, save the narrow
+    OIDC-`nonce` exception of OAuth 2.1 §7.5.1.1.
+
+    When the request is delivered via PAR (`request_uri`, RFC 9126 §4)
+    or JAR (`request`, RFC 9101 §5), only `client_id` plus that one
+    parameter appear in the query string — everything else comes from
+    the pushed/signed request object.
+  externalDocs:
+    description: RFC 6749 §4.1.1, OIDC Core §3.1.2.1
+    url: https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.1
+  parameters:
+  - $ref: ../components/parameters.yaml#/ResponseType
+  - $ref: ../components/parameters.yaml#/ClientId
+  - $ref: ../components/parameters.yaml#/RedirectUri
+  - $ref: ../components/parameters.yaml#/Scope
+  - $ref: ../components/parameters.yaml#/State
+  - $ref: ../components/parameters.yaml#/CodeChallenge
+  - $ref: ../components/parameters.yaml#/CodeChallengeMethod
+  - $ref: ../components/parameters.yaml#/Nonce
+  - $ref: ../components/parameters.yaml#/Prompt
+  - $ref: ../components/parameters.yaml#/LoginHint
+  - $ref: ../components/parameters.yaml#/MaxAge
+  - $ref: ../components/parameters.yaml#/AcrValues
+  - $ref: ../components/parameters.yaml#/ResponseMode
+  - $ref: ../components/parameters.yaml#/RequestUri
+  - $ref: ../components/parameters.yaml#/AuthorizationDetails
+  - $ref: ../components/parameters.yaml#/Resource
+  - $ref: ../components/parameters.yaml#/Display
+  - $ref: ../components/parameters.yaml#/UILocales
+  - $ref: ../components/parameters.yaml#/ClaimsLocales
+  - $ref: ../components/parameters.yaml#/IDTokenHint
+  - $ref: ../components/parameters.yaml#/Claims
+  - $ref: ../components/parameters.yaml#/Request
+  - $ref: ../components/parameters.yaml#/DPoPJKT
+  responses:
+    '302':
+      description: |
+        User-agent redirect back to `redirect_uri`. The `Location`
+        header carries:
+        - on success: `code`, `state`, plus `iss` (RFC 9207) when the AS
+          advertises `authorization_response_iss_parameter_supported`.
+          For OIDC Hybrid (`response_type=code id_token`) it also carries
+          `id_token` in the URL fragment.
+        - on failure: `error`, `error_description`, `error_uri`, `state`,
+          plus `iss` per RFC 9207.
+
+        OAuth 2.1 §7.5.3 / RFC 9700 §4.12 RECOMMEND HTTP 303 over 302
+        and PROHIBIT 307; both are modeled as alternative status codes.
+      headers:
+        Location:
+          required: true
+          schema:
+            type: string
+            format: uri
+            examples:
+            - https://client.example.com/cb?code=SplxlOBeZQQYbYS6WxSbIA&state=xyz&iss=https%3A%2F%2Fas.example.com
+            - https://client.example.com/cb?error=access_denied&state=xyz&iss=https%3A%2F%2Fas.example.com
+    '303':
+      description: Same as 302; RECOMMENDED status code per OAuth 2.1 §7.5.3.
+      headers:
+        Location:
+          required: true
+          schema:
+            type: string
+            format: uri
+    '200':
+      description: HTML consent or authentication page (intermediate state)
+      content:
+        text/html:
+          schema:
+            type: string
+    '400':
+      description: |
+        Non-redirecting error. Per RFC 6749 §4.1.2.1, when `redirect_uri`
+        is missing, malformed, or does not match a registered URI, the
+        AS MUST NOT redirect to it; instead it returns an HTML error page.
+        Also returned for malformed `client_id`.
+      content:
+        text/html:
+          schema:
+            type: string
