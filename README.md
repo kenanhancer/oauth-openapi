@@ -256,6 +256,12 @@ oauth-openapi/
 │       ├── preview.md                     start all 3 viewers
 │       ├── preview-stop.md                stop them
 │       └── lint.md                        run Spectral
+├── oauth-openapi-modular/                 multi-file view of the same spec (derived)
+│   ├── README.md                          how it is produced and verified
+│   ├── split-oauth-openapi.py             regenerates the tree from the spec
+│   ├── bundle.sh                          reassembles it and lints the bundle
+│   ├── openapi.yaml                       entry point — $refs into spec/
+│   └── spec/{paths,components}/           one file per path and component group
 ├── tools/
 │   ├── README.md                          runbook for the scripts in this folder
 │   └── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
@@ -270,6 +276,34 @@ oauth-openapi/
     ├── ibm-api-connect-oauth.yaml         IBM's archived spec (Swagger 2.0, 2021)
     └── ybelenko-oauth2-endpoints.yaml     ybelenko's community spec (OpenAPI 3.0.2, 2021)
 ```
+
+### The modular view
+
+`oauth-openapi-modular/` holds the same specification split across files —
+one per path, one per component group — for anyone who would rather read it
+that way than scroll 2,700 lines.
+
+It is **derived, not a second source**. `split-oauth-openapi.py` generates it
+from `oauth-openapi.yaml`, and the result is data-identical: the only
+differences are `discriminator.mapping` values rewritten to point at the files
+the schemas now live in, which splitting requires.
+
+```bash
+cd oauth-openapi-modular
+python3 split-oauth-openapi.py   # regenerate after the spec changes
+./bundle.sh                      # reassemble + lint the bundle (0 errors, 0 warnings)
+```
+
+Two things to know before editing it:
+
+- The script **overwrites the tree wholesale**, so hand edits are lost. Change
+  `oauth-openapi.yaml` and regenerate.
+- The split **drops YAML comments** — the `# ===` banners and inline `# RFC …`
+  notes live only in the single-file spec.
+
+Lint the *bundle*, not the entry point: Spectral evaluates `$ref` siblings
+before resolution, so linting `openapi.yaml` directly reports path-item errors
+that do not exist in the assembled document.
 
 ## Claude Code integration
 
