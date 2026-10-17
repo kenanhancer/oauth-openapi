@@ -1,10 +1,16 @@
 # tools/
 
-Developer utilities for working with this OpenAPI spec.
+Developer utilities for working with this OpenAPI spec and the standards it is
+built from.
 
-These scripts are **generic** — they take any OpenAPI YAML/JSON file as input,
-not just the one in this repo. Drop them into another project and they'll work
-the same way.
+These scripts are **generic** — they take any OpenAPI YAML/JSON file or any
+specification identifier/URL as input, not just the ones in this repo. Drop
+them into another project and they'll work the same way.
+
+| Script | What it does |
+|---|---|
+| [`serve-swagger-ui.sh`](#serve-swagger-uish) | Serve Swagger UI for any OpenAPI spec, on the fly |
+| [`fetch-specs.sh`](#fetch-specssh) | Vendor RFCs, Internet-Drafts and other specs (e.g. OpenID Foundation), and detect drift in vendored copies |
 
 ## Scripts
 
@@ -122,3 +128,139 @@ override the host:
 ```bash
 ./tools/serve-swagger-ui.sh openapi.yaml --host 0.0.0.0 --port 8080 --no-open
 ```
+
+---
+
+### `fetch-specs.sh`
+
+Downloads specification documents into a directory, and audits an
+already-vendored set for drift. RFCs come from
+`https://www.rfc-editor.org/rfc/rfcNNNN.txt`; Internet-Drafts from
+`https://www.ietf.org/archive/id/<name>-<rev>.txt`. When a draft is named
+without a revision, the latest one is resolved through the IETF Datatracker
+API and the file is stored under the unversioned name, so it refreshes in place.
+Any other document — e.g. an OpenID Foundation spec — is named
+`<file>=<https-url>`.
+
+#### Why this exists
+
+`references/rfc-sources/` and `references/oidf-sources/` were refreshed by
+hand several times (initial snapshot, the RFC 8705 + OAuth 2.1 refresh, the
+17-RFC gap fill, the OIDF move). Each run was a pasted `curl` loop with no
+verification, and nothing told us when the vendored set had gone stale — e.g.
+when OAuth 2.1 moved from draft-15 to -16, when RFC 10017 / RFC 10027 were
+published, or when an OIDF spec gained an errata set in place. This script makes
+the refresh repeatable and the staleness detectable (`--check` exits non-zero).
+Each folder keeps its document list in a `manifest.txt`.
+
+#### Quick start
+
+```bash
+# From the project root — refresh everything listed in the manifests
+./tools/fetch-specs.sh --dir references/rfc-sources  --file references/rfc-sources/manifest.txt
+./tools/fetch-specs.sh --dir references/oidf-sources --file references/oidf-sources/manifest.txt
+
+# Read-only audit: is anything missing, changed upstream, or a newer draft out?
+./tools/fetch-specs.sh --check --dir references/rfc-sources  --file references/rfc-sources/manifest.txt
+./tools/fetch-specs.sh --check --dir references/oidf-sources --file references/oidf-sources/manifest.txt
+```
+
+#### Usage
+
+```text
+fetch-specs.sh [options] <doc>...
+fetch-specs.sh [options] --file <list>
+
+DOCUMENT IDENTIFIERS
+  6749 | rfc6749 | RFC6749         An RFC        -> rfc6749.txt
+  draft-ietf-oauth-v2-1            Latest draft  -> draft-ietf-oauth-v2-1.txt
+  draft-ietf-oauth-v2-1-16         Exact draft   -> draft-ietf-oauth-v2-1-16.txt
+  <file>=<https-url>               Any document  -> <file>
+
+OPTIONS
+  -d, --dir <path>        Directory holding the vendored files (default: .).
+  -f, --file <path>       Read identifiers from a list file ('#' comments allowed;
+                          so URLs cannot carry a #fragment).
+  -c, --check             Compare local files with upstream; write nothing.
+  -n, --dry-run           Print what would be fetched.
+  -t, --timeout <secs>    Per-request timeout (default: 60).
+  -q, --quiet             Suppress info logs (status lines remain).
+  -v, --verbose           Print debug logs.
+  -h, --help              Full help (examples, exit codes).
+      --version           Print version.
+```
+
+Each document produces one status line on stdout — `<STATUS> <file> <detail>`
+— and logs go to stderr, so the output can be piped or grepped:
+
+| Mode | Statuses |
+|---|---|
+| fetch (default) | `ADDED`, `UPDATED`, `UNCHANGED`, `FAILED` |
+| `--check` | `OK`, `DIFFERENT`, `MISSING`, `OUTDATED` (newer draft revision exists), `FAILED` |
+
+#### Examples
+
+```bash
+# Vendor specific RFCs
+./tools/fetch-specs.sh --dir references/rfc-sources 10017 10027 5849
+
+# Track the latest OAuth 2.1 draft under a stable file name
+./tools/fetch-specs.sh --dir references/rfc-sources draft-ietf-oauth-v2-1
+
+# Pin two exact revisions side by side, then diff them
+./tools/fetch-specs.sh --dir /tmp/oauth21 draft-ietf-oauth-v2-1-15 draft-ietf-oauth-v2-1-16
+diff -u /tmp/oauth21/draft-ietf-oauth-v2-1-15.txt /tmp/oauth21/draft-ietf-oauth-v2-1-16.txt
+
+# Vendor a non-IETF spec under a chosen local name
+./tools/fetch-specs.sh --dir references/oidf-sources \
+  oidc-core-1.0.html=https://openid.net/specs/openid-connect-core-1_0.html
+
+# CI gate: fail the build when the vendored set drifts
+./tools/fetch-specs.sh -q --check --dir references/rfc-sources \
+  --file references/rfc-sources/manifest.txt || exit 1
+```
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success (`--check`: everything up to date) |
+| 2 | Bad arguments |
+| 3 | Missing dependency (`curl`, `cmp`; `python3` only for latest-draft lookup) |
+| 4 | Unrecognized identifier, unreadable list file, or unwritable directory |
+| 5 | A download or content verification failed |
+| 6 | `--check` found a missing, different, or outdated document |
+| 10 | Internal/runtime error |
+
+#### Requirements
+
+| Tool | Why | Where |
+|---|---|---|
+| `bash` (3.2+) | Script interpreter | macOS / Linux default |
+| `curl` | Downloads (with retries and a timeout) | macOS / Linux default |
+| `cmp` | Byte-for-byte comparison | macOS / Linux default |
+| `python3` (optional) | Parse the Datatracker JSON for the latest draft revision | macOS / Linux default |
+
+#### Design principles applied
+
+- **Strict mode** and **documented exit codes**, as in `serve-swagger-ui.sh`
+- **Fail fast**: every identifier is validated before any network access or write
+- **Atomic writes**: downloads land in a hidden `.partial` file in the target
+  directory, are verified, then renamed — an interrupted run never leaves a
+  truncated RFC behind
+- **Content verification**: an RFC must carry `Request for Comments: NNNN`
+  (or the early-RFC `RFC: NNN`) in its header; a draft must name its exact
+  `<name>-<rev>`; an `.html` document must contain an `<html>` element — so an
+  error page or a wrong file saved with a 200 status is rejected
+- **Read-only audit mode** (`--check`) suitable for CI
+- **Idempotent**: re-running reports `UNCHANGED` and rewrites nothing
+
+#### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `Unrecognized document identifier` | Use `6749` / `rfc6749`, a `draft-…` name (a trailing `-NN` is read as the revision), or `<file>=https://…` with a bare file name. |
+| `FAILED … cannot resolve latest revision` | The draft name is wrong or Datatracker is unreachable; pass an exact `-NN` revision instead. |
+| `header check failed` | Upstream returned something other than the document (maintenance page, wrong number). Retry, or inspect with `--verbose`. |
+| `DIFFERENT` on a published RFC | Published RFC bytes never change — the local copy was edited or corrupted. Re-run without `--check` to restore it. |
+| `DIFFERENT` on a `<file>=<url>` document | The publisher revised it in place (OIDF errata sets do this). Review the change, then re-run without `--check` and note the new revision in the folder README. |
