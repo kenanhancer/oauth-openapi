@@ -63,15 +63,21 @@ signal that the schema is dead code.
   - `ibm-api-connect-oauth.yaml`, `ybelenko-oauth2-endpoints.yaml` — historical
     community specs. **Read-only**; never overwrite or "fix" them — they
     document the past, not the present.
-  - `rfc-sources/` — vendored canonical IETF RFC/draft text (every OAuth WG RFC
-    plus the OAuth 2.1 draft). **Refreshable**: re-pull when a draft revises (see
-    `rfc-sources/README.md`). Published RFC bytes never change; the OAuth 2.1
-    draft does.
-  - `oidf-sources/` — vendored OpenID Foundation specs (OpenID Connect Core /
-    Discovery, the OAuth response-mode specs, and JARM). These are **not** RFCs
-    (HTML published by the OpenID Foundation) and can be revised in place, so
-    re-pull when auditing against a newer revision (see `oidf-sources/README.md`).
-  - `rfc-validation/` and `audit/` (`rfc-audit-synthesis.md`,
+  - `rfc-sources/` — vendored canonical IETF RFC/draft text: every OAuth WG
+    RFC, OAuth 1.0 (RFC 5849), the RFCs that formally update them, the JOSE
+    core, every RFC the YAML cites, and the OAuth 2.1 draft — the scope rule is
+    in `rfc-sources/README.md`, the list in `rfc-sources/manifest.txt`.
+    **Refreshable** with `tools/fetch-specs.sh` (`--check` reports missing,
+    changed, or outdated documents). Published RFC bytes never change; the
+    OAuth 2.1 draft does — after a refresh, re-check every `OAuth 2.1 §x.y`
+    citation in the YAML.
+  - `oidf-sources/` — vendored OpenID Foundation specs whose elements the YAML
+    models or advertises (OIDC Core / Discovery / Registration, session and
+    logout specs, CIBA, the response-mode specs, JARM). These are **not** RFCs
+    (HTML published by the OpenID Foundation) and can be revised in place;
+    refresh and check them the same way via `oidf-sources/manifest.txt`.
+  - `rfc-validation/` and `audit/` (`rfc-coverage-audit.md`,
+    `oauth-rfc-timeline.md`, `rfc-audit-synthesis.md`,
     `live-idp-comparison.md`, `community-reference-specs.md`) — audit evidence;
     update when re-auditing.
 - `.claude/` — Claude Code project config (permissions + slash commands).

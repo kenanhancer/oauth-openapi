@@ -13,10 +13,16 @@ server scaffolds in multiple languages.
 The arc is three steps:
 
 1. **Read the RFCs.** Canonical source text is vendored under
-   `references/rfc-sources/` so each part of the spec can be cross-checked
-   against authoritative material. `references/audit/rfc-audit-synthesis.md` walks
-   through the audit that reconciled the spec against 20 RFCs and related
-   specs.
+   `references/rfc-sources/` (every OAuth WG RFC, OAuth 1.0, the JOSE core and
+   the OAuth 2.1 draft) and `references/oidf-sources/` (OpenID Connect and
+   related OpenID Foundation specs), so each part of the spec can be
+   cross-checked against authoritative material. Start with
+   [`references/audit/oauth-rfc-timeline.md`](references/audit/oauth-rfc-timeline.md)
+   — how OAuth evolved and a reading path through those files.
+   [`references/audit/rfc-coverage-audit.md`](references/audit/rfc-coverage-audit.md)
+   records how the spec measures up against every RFC (October 2026);
+   `references/audit/rfc-audit-synthesis.md` is the earlier audit against 20
+   RFCs and related specs.
 2. **Encode the protocol.** Every endpoint, parameter, grant type, and error
    response is a typed YAML entry in `oauth-openapi.yaml`, with `externalDocs`
    pointing back to the RFC clause that justifies it.
@@ -264,15 +270,19 @@ oauth-openapi/
 │   └── spec/{paths,components}/           one file per path and component group
 ├── tools/
 │   ├── README.md                          runbook for the scripts in this folder
-│   └── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
+│   ├── serve-swagger-ui.sh                generic on-the-fly Swagger UI launcher
+│   └── fetch-specs.sh                     vendor RFCs/drafts/specs and check them for drift
 └── references/
     ├── audit/                             spec-vs-standard audit evidence
-    │   ├── rfc-audit-synthesis.md         audit of the spec against 20 RFCs and related specs
+    │   ├── oauth-rfc-timeline.md          OAuth history, RFC timeline and reading path (start here)
+    │   ├── rfc-coverage-audit.md          2026-10 audit: every OAuth RFC vs. this repo
+    │   ├── rfc-coverage-findings/         the audit's verified findings, one file per RFC cluster
+    │   ├── rfc-audit-synthesis.md         first audit (May 2026) against 20 RFCs and related specs
     │   ├── live-idp-comparison.md         how the spec compares to live issuers (Google, Microsoft)
     │   └── community-reference-specs.md   survey of the two community reference specs
-    ├── rfc-sources/                       vendored canonical RFC text snapshots — primary study material
-    ├── oidf-sources/                      vendored OpenID Foundation specs (OIDC, JARM, response modes)
-    ├── rfc-validation/                    per-RFC validation evidence backing the audit
+    ├── rfc-sources/                       vendored RFC + OAuth 2.1 draft text (manifest.txt) — primary study material
+    ├── oidf-sources/                      vendored OpenID Foundation specs (manifest.txt)
+    ├── rfc-validation/                    per-RFC validation evidence from the May 2026 audit
     ├── ibm-api-connect-oauth.yaml         IBM's archived spec (Swagger 2.0, 2021)
     └── ybelenko-oauth2-endpoints.yaml     ybelenko's community spec (OpenAPI 3.0.2, 2021)
 ```

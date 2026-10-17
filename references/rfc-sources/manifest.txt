@@ -1,0 +1,74 @@
+# Every IETF document vendored in references/rfc-sources/ — one identifier per
+# line, consumed by tools/fetch-specs.sh. Edit this list, then refresh:
+#
+#   ./tools/fetch-specs.sh --dir references/rfc-sources --file references/rfc-sources/manifest.txt
+#   ./tools/fetch-specs.sh --dir references/rfc-sources --file references/rfc-sources/manifest.txt --check
+#
+# Scope rule (see README.md): every RFC published by the IETF OAuth WG; OAuth's
+# origin (RFC 5849); every RFC that formally Updates an OAuth WG RFC; the JOSE
+# core that OAuth/OIDC tokens are built on; and every RFC that
+# oauth-openapi.yaml cites. Everything else OAuth-related is catalogued in
+# ../audit/rfc-coverage-audit.md but deliberately not vendored.
+
+# --- Origin -------------------------------------------------------------------
+5849    # The OAuth 1.0 Protocol (2010; obsoleted by RFC 6749)
+
+# --- OAuth WG RFCs ------------------------------------------------------------
+6749    # OAuth 2.0 Authorization Framework
+6750    # Bearer Token Usage
+6755    # IETF URN Sub-Namespace for OAuth
+6819    # Threat Model and Security Considerations
+7009    # Token Revocation
+7519    # JSON Web Token (JWT)
+7521    # Assertion Framework
+7522    # SAML 2.0 Profile (client auth + grants)
+7523    # JWT Profile (client auth + grants)
+7591    # Dynamic Client Registration
+7592    # Dynamic Client Registration Management (Experimental)
+7636    # PKCE
+7662    # Token Introspection
+7800    # Proof-of-Possession Key Semantics for JWTs (cnf)
+8176    # Authentication Method Reference Values (amr)
+8252    # OAuth 2.0 for Native Apps (BCP 212)
+8414    # Authorization Server Metadata
+8628    # Device Authorization Grant
+8693    # Token Exchange
+8705    # Mutual-TLS Client Auth & Certificate-Bound Tokens
+8707    # Resource Indicators
+8725    # JWT Best Current Practices (BCP 225)
+9068    # JWT Profile for Access Tokens
+9101    # JWT-Secured Authorization Request (JAR)
+9126    # Pushed Authorization Requests (PAR)
+9207    # Authorization Server Issuer Identification (iss)
+9278    # JWK Thumbprint URI
+9396    # Rich Authorization Requests (RAR)
+9449    # DPoP
+9470    # Step Up Authentication Challenge
+9700    # Security Best Current Practice (BCP 240)
+9701    # JWT Response for Token Introspection
+9728    # Protected Resource Metadata
+9901    # Selective Disclosure for JWTs (SD-JWT)
+10017   # OAuth 2.0 for Browser-Based Applications (BCP 212)
+10027   # Security of Cross-Device Flows (BCP 247)
+
+# --- Formal updates to OAuth WG RFCs from other WGs ---------------------------
+7797    # JWS Unencoded Payload Option (Updates RFC 7519)
+8996    # Deprecating TLS 1.0 and TLS 1.1 (Updates RFC 6749, RFC 6750)
+
+# --- JOSE core ------------------------------------------------------------------
+7515    # JSON Web Signature (JWS)
+7516    # JSON Web Encryption (JWE)
+7517    # JSON Web Key (JWK)
+7518    # JSON Web Algorithms (JWA)
+7638    # JWK Thumbprint
+8037    # CFRG curves in JOSE (EdDSA / OKP keys)
+9864    # Fully-Specified Algorithms for JOSE and COSE (Updates RFC 7518, RFC 8037)
+
+# --- Infrastructure RFCs cited by oauth-openapi.yaml ---------------------------
+3986    # URI Generic Syntax
+5646    # Tags for Identifying Languages (BCP 47)
+7617    # The 'Basic' HTTP Authentication Scheme
+9110    # HTTP Semantics
+
+# --- Internet-Drafts (tracked at the latest revision) --------------------------
+draft-ietf-oauth-v2-1    # The OAuth 2.1 Authorization Framework

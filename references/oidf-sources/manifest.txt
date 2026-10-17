@@ -1,0 +1,33 @@
+# Every OpenID Foundation document vendored in references/oidf-sources/ — one
+# <local-file>=<url> entry per line, consumed by tools/fetch-specs.sh:
+#
+#   ./tools/fetch-specs.sh --dir references/oidf-sources --file references/oidf-sources/manifest.txt
+#   ./tools/fetch-specs.sh --dir references/oidf-sources --file references/oidf-sources/manifest.txt --check
+#
+# OIDF specs can be revised in place (errata sets), so --check reporting
+# DIFFERENT means "upstream changed": review it, then refresh.
+#
+# Scope rule (see README.md): every OIDF spec whose protocol elements
+# oauth-openapi.yaml models or advertises, plus the editions RFC 9700 cites.
+
+# --- OpenID Connect core ----------------------------------------------------------
+oidc-core-1.0.html=https://openid.net/specs/openid-connect-core-1_0.html
+oidc-discovery-1.0.html=https://openid.net/specs/openid-connect-discovery-1_0.html
+openid-connect-registration-1_0.html=https://openid.net/specs/openid-connect-registration-1_0.html
+
+# --- Session management & logout (fields in OAuthServerMetadata) ------------------
+openid-connect-session-1_0.html=https://openid.net/specs/openid-connect-session-1_0.html
+openid-connect-rpinitiated-1_0.html=https://openid.net/specs/openid-connect-rpinitiated-1_0.html
+openid-connect-frontchannel-1_0.html=https://openid.net/specs/openid-connect-frontchannel-1_0.html
+openid-connect-backchannel-1_0.html=https://openid.net/specs/openid-connect-backchannel-1_0.html
+
+# --- CIBA (backchannel_* fields in OAuthServerMetadata) ----------------------------
+openid-client-initiated-backchannel-authentication-core-1_0.html=https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html
+
+# --- OAuth 2.0 response encoding --------------------------------------------------
+oauth-v2-multiple-response-types-1_0.html=https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
+oauth-v2-form-post-response-mode-1_0.html=https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html
+# JARM: the 2018 FAPI draft is the edition RFC 9700 and RFC 9207 cite; the Final
+# (2022, incorporating errata set 1, 2025) is the current text.
+openid-financial-api-jarm.html=https://openid.net/specs/openid-financial-api-jarm.html
+oauth-v2-jarm.html=https://openid.net/specs/oauth-v2-jarm.html
